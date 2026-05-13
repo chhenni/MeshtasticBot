@@ -217,12 +217,12 @@ def get_forecast_24h(lat: float, lon: float) -> list[dict] | None:
 
 def format_forecast_24h_messages(forecast: list[dict], lat: float, lon: float) -> list[str]:
     """
-    Format a 24-hour hourly forecast into Meshtastic-safe messages (<190 chars each).
-    Groups entries 6 per message for readability.
+    Format a 24-hour hourly forecast into Meshtastic-safe messages.
+    Meshtastic's hard limit is 228 UTF-8 bytes; we target <=200 bytes per message.
+    Lines are added to each page until the byte limit would be exceeded.
     Each message is labelled [N/total] when there are multiple parts.
     """
-    MAX_LEN = 185
-    HOURS_PER_MSG = 6
+    MAX_BYTES = 200
 
     header = f"24t varsel {lat:.2f}N {lon:.2f}E:"
     lines = []
@@ -233,12 +233,24 @@ def format_forecast_24h_messages(forecast: list[dict], lat: float, lon: float) -
         day_part = f" {day_label}" if day_label else ""
         lines.append(f"{h['hour']}h {temp} {h['symbol']},{h['wind']}m/s{precip}{day_part}")
 
-    # Pack lines into pages of HOURS_PER_MSG, respecting MAX_LEN
     pages: list[str] = []
-    for i in range(0, len(lines), HOURS_PER_MSG):
-        chunk = lines[i:i + HOURS_PER_MSG]
-        page = header + "\n" + "\n".join(chunk) if i == 0 else "\n".join(chunk)
-        pages.append(page)
+    current_lines: list[str] = []
+    include_header = True
+
+    for line in lines:
+        candidate = (header + "\n" + "\n".join(current_lines + [line])
+                     if include_header else "\n".join(current_lines + [line]))
+        if current_lines and len(candidate.encode("utf-8")) > MAX_BYTES:
+            pages.append(header + "\n" + "\n".join(current_lines)
+                         if include_header else "\n".join(current_lines))
+            current_lines = [line]
+            include_header = False
+        else:
+            current_lines.append(line)
+
+    if current_lines:
+        pages.append(header + "\n" + "\n".join(current_lines)
+                     if include_header else "\n".join(current_lines))
 
     total = len(pages)
     if total == 1:
@@ -272,7 +284,7 @@ def format_forecast_messages(forecast: list[dict], lat: float, lon: float) -> li
     current = header
     for line in lines:
         candidate = current + "\n" + line
-        if len(candidate) > MAX_LEN and current != header:
+        if len(candidate.encode("utf-8")) > MAX_LEN and current != header:
             pages.append(current)
             current = line
         else:
