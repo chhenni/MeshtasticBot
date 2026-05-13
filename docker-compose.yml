@@ -7,8 +7,8 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
     # Serial connection: uncomment and adjust device path
-    #devices:
-    #  - /dev/ttyUSB0:/dev/ttyUSB0
+    devices:
+      - /dev/ttyUSB1:/dev/ttyUSB1
     # BLE connection: uncomment to share host network and D-Bus
     #network_mode: host
     #volumes:

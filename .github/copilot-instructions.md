@@ -48,7 +48,6 @@ python main.py
 | `/help` | Lists all available commands (two messages) |
 | `/weather` | 7-day daily forecast from yr.no (requires node GPS position) |
 | `/24hour` (`/24h`) | Hourly forecast for next 24 hours from yr.no (requires node GPS position) |
-
 | `/radio` | Amateur radio HF/VHF band conditions, solar flux and K-index via HamQSL |
 | `/bandplan <band>` | IARU Region 1 band plan for a specific band (e.g. `/bandplan 20m`). Supported: 160m, 80m, 60m, 40m, 30m, 20m, 17m, 15m, 12m, 10m, 6m, 2m, 70cm |
 | `/bandplan_check <freq>` | Look up allowed usage for a frequency. Accepts MHz, kHz or bare number (e.g. `/bandplan_check 14.225`, `/bandplan_check 14225 kHz`) |
