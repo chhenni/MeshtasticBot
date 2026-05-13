@@ -231,7 +231,7 @@ def format_forecast_24h_messages(forecast: list[dict], lat: float, lon: float) -
         precip = f" {h['precip']}mm" if h["precip"] > 0 else ""
         day_label = h["dt"].strftime("(%d.%m)") if h["dt"].hour == 0 else ""
         day_part = f" {day_label}" if day_label else ""
-        lines.append(f"{h['hour']}:{temp} {h['symbol']},{h['wind']}m/s{precip}{day_part}")
+        lines.append(f"{h['hour']}h {temp} {h['symbol']},{h['wind']}m/s{precip}{day_part}")
 
     # Pack lines into pages of HOURS_PER_MSG, respecting MAX_LEN
     pages: list[str] = []
