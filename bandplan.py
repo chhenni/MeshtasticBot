@@ -38,9 +38,9 @@ BANDPLAN: dict[str, dict] = {
     "60m": {
         "range": "5.3515-5.3665 MHz",
         "segments": [
-            ("5.3515-5.3540", "CW/Digital (maks 15W)",  5.3515, 5.3540),
-            ("5.3540-5.3660", "SSB/Digital (maks 15W)", 5.3540, 5.3660),
-            ("5.3660-5.3665", "Svak signal (maks 1W)",  5.3660, 5.3665),
+            ("5.3515-5.3540", "CW/Digital (sekundær, sjekk Nkom)",  5.3515, 5.3540),
+            ("5.3540-5.3660", "SSB/Digital (sekundær, sjekk Nkom)", 5.3540, 5.3660),
+            ("5.3660-5.3665", "Svak signal (sekundær, sjekk Nkom)",  5.3660, 5.3665),
         ],
     },
     "40m": {
