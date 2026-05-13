@@ -50,5 +50,6 @@ python main.py
 | `/24hour` (`/24h`) | Hourly forecast for next 24 hours from yr.no (requires node GPS position) |
 
 | `/radio` | Amateur radio HF/VHF band conditions, solar flux and K-index via HamQSL |
+| `/bandplan <band>` | IARU Region 1 band plan for a specific band (e.g. `/bandplan 20m`). Supported: 160m, 80m, 60m, 40m, 30m, 20m, 17m, 15m, 12m, 10m, 6m, 2m, 70cm |
 
 **Rule: whenever a new command is added, always add it to both this table and the `HELP_MESSAGES` list in `main.py`.**

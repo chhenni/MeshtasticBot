@@ -19,6 +19,7 @@ from weather import get_lightning_alerts, format_alert_message, \
     get_node_position, get_forecast, format_forecast_messages, \
     get_forecast_24h, format_forecast_24h_messages, \
     get_radio_forecast, format_radio_messages
+from bandplan import BANDPLAN, resolve_band, format_bandplan_messages
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -59,7 +60,8 @@ HELP_MESSAGES = [
     "/help - Vis denne hjelpen\n"
     "/weather - 7-dagers varsel (krever GPS)\n"
     "/24hour (/24h) - Timevarsel neste 24t (krever GPS)\n"
-    "/radio - Amatørradio båndkondisjon",
+    "/radio - Amatørradio båndkondisjon\n"
+    "/bandplan <bånd> - Båndplan (eks: /bandplan 20m)",
 
     "MeshtasticBot info [2/2]:\n"
     "- Send kommandoer som DM\n"
@@ -143,6 +145,29 @@ def handle_radio_command(reply_fn) -> None:
         log.info(f"/radio reply {i + 1}/{len(messages)}: {msg}")
 
 
+def handle_bandplan_command(text: str, reply_fn) -> None:
+    """Parse band from command text and send band plan segments."""
+    parts = text.strip().split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        available = ", ".join(BANDPLAN.keys())
+        reply_fn(f"Bruk: /bandplan <bånd>\nTilgjengelig: {available}")
+        return
+
+    band = resolve_band(parts[1])
+    if band is None:
+        available = ", ".join(BANDPLAN.keys())
+        reply_fn(f"Ukjent bånd '{parts[1]}'.\nTilgjengelig: {available}")
+        return
+
+    log.info(f"/bandplan {band} requested")
+    messages = format_bandplan_messages(band)
+    for i, msg in enumerate(messages):
+        if i > 0:
+            time.sleep(3)
+        reply_fn(msg)
+        log.info(f"/bandplan reply {i + 1}/{len(messages)}: {msg}")
+
+
 def make_receive_handler(interface, channel: int):
     def on_receive(packet, interface=interface):
         decoded = packet.get("decoded", {})
@@ -177,6 +202,10 @@ def make_receive_handler(interface, channel: int):
 
         if text.lower().startswith("/radio"):
             handle_radio_command(reply_fn)
+            return
+
+        if text.lower().startswith("/bandplan"):
+            handle_bandplan_command(text, reply_fn)
             return
 
         reply = generate_reply(text, sender)
