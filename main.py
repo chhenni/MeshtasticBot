@@ -53,11 +53,31 @@ def connect(cfg: dict):
     raise ValueError(f"Unknown connection type: {kind!r}")
 
 
+HELP_MESSAGES = [
+    "MeshtasticBot kommandoer [1/2]:\n"
+    "/help - Vis denne hjelpen\n"
+    "/weather - 7-dagers varsel (krever GPS)\n"
+    "/24hour - Timevarsel neste 24t (krever GPS)",
+
+    "MeshtasticBot info [2/2]:\n"
+    "- Send kommandoer i kanal eller som DM\n"
+    "- GPS-posisjon må deles for værvarsler\n"
+    "- Lynnvarsler sendes automatisk ved fare",
+]
+
+
+def handle_help_command(reply_fn) -> None:
+    for i, msg in enumerate(HELP_MESSAGES):
+        if i > 0:
+            time.sleep(2)
+        reply_fn(msg)
+
+
 def generate_reply(text: str, sender_id: str) -> str | None:
     """
     Return a reply string, or None to stay silent.
     Customize this function to implement your bot logic.
-    Note: /weather is handled separately in make_receive_handler.
+    Note: commands are handled separately in make_receive_handler.
     """
     return f"Echo from bot: {text}"
 
@@ -126,6 +146,10 @@ def make_receive_handler(interface, channel: int):
             log.info(f"[ch{channel}] {sender}: {text}")
             reply_fn = lambda msg: interface.sendText(msg, channelIndex=channel)
         else:
+            return
+
+        if text.lower().startswith("/help"):
+            handle_help_command(reply_fn)
             return
 
         if text.lower().startswith("/weather"):
