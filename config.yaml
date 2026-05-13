@@ -1,0 +1,26 @@
+# MeshtasticBot configuration
+
+# Which channel index to listen on and reply to (0-based, so channel 2 = index 2)
+channel: 2
+
+connection:
+  # type: serial | tcp | ble
+  type: serial
+  port: /dev/ttyUSB1
+  # serial: leave 'port' unset for auto-detection, or set explicitly:
+  # port: /dev/ttyUSB0
+
+  # tcp: set 'host' to the node's IP address or hostname
+  # host: 192.168.1.100
+
+  # ble: leave 'address' unset for auto-detection, or set a MAC / device name:
+  # address: "AA:BB:CC:DD:EE:FF"
+
+# Weather alert settings (Norwegian Meteorological Institute MetAlerts API)
+weather:
+  enabled: true
+  # Norwegian county code (fylkesnummer). 42 = Agder.
+  # See https://api.met.no/weatherapi/metalerts/2.0/documentation for valid codes.
+  county: 42
+  # How often to check for new alerts (in seconds). Default: 3600 (1 hour)
+  interval_seconds: 3600
