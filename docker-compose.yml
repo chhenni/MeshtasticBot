@@ -1,0 +1,14 @@
+services:
+  meshtasticbot:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    # Serial connection: uncomment and adjust device path
+    #devices:
+    #  - /dev/ttyUSB0:/dev/ttyUSB0
+    # BLE connection: uncomment to share host network and D-Bus
+    #network_mode: host
+    #volumes:
+    #  - ./config.yaml:/app/config.yaml:ro
+    #  - /run/dbus:/run/dbus:ro
