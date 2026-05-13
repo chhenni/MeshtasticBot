@@ -16,7 +16,8 @@ import meshtastic.ble_interface
 from pubsub import pub
 
 from weather import get_lightning_alerts, format_alert_message, \
-    get_node_position, get_forecast, format_forecast_messages
+    get_node_position, get_forecast, format_forecast_messages, \
+    get_forecast_24h, format_forecast_24h_messages
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -62,7 +63,7 @@ def generate_reply(text: str, sender_id: str) -> str | None:
 
 
 def handle_weather_command(interface, channel: int, sender_id: str) -> None:
-    """Look up sender position, fetch forecast, send multi-message reply."""
+    """Look up sender position, fetch 7-day forecast, send multi-message reply."""
     pos = get_node_position(interface, sender_id)
     if pos is None:
         interface.sendText(
@@ -82,9 +83,35 @@ def handle_weather_command(interface, channel: int, sender_id: str) -> None:
     messages = format_forecast_messages(forecast, lat, lon)
     for i, msg in enumerate(messages):
         if i > 0:
-            time.sleep(3)  # Give the mesh time to propagate before sending the next part
+            time.sleep(3)
         interface.sendText(msg, channelIndex=channel)
         log.info(f"/weather reply {i + 1}/{len(messages)}: {msg}")
+
+
+def handle_24h_command(interface, channel: int, sender_id: str) -> None:
+    """Look up sender position, fetch 24-hour forecast, send multi-message reply."""
+    pos = get_node_position(interface, sender_id)
+    if pos is None:
+        interface.sendText(
+            "Ingen GPS-posisjon funnet for din node. Del posisjon og prøv igjen.",
+            channelIndex=channel,
+        )
+        return
+
+    lat, lon = pos
+    log.info(f"/24hour requested by {sender_id} at ({lat}, {lon})")
+    forecast = get_forecast_24h(lat, lon)
+
+    if forecast is None:
+        interface.sendText("Klarte ikke hente varsel fra yr.no.", channelIndex=channel)
+        return
+
+    messages = format_forecast_24h_messages(forecast, lat, lon)
+    for i, msg in enumerate(messages):
+        if i > 0:
+            time.sleep(3)
+        interface.sendText(msg, channelIndex=channel)
+        log.info(f"/24hour reply {i + 1}/{len(messages)}: {msg}")
 
 
 def make_receive_handler(interface, channel: int):
@@ -102,6 +129,10 @@ def make_receive_handler(interface, channel: int):
 
         if text.lower().startswith("/weather"):
             handle_weather_command(interface, channel, sender)
+            return
+
+        if text.lower().startswith("/24hour"):
+            handle_24h_command(interface, channel, sender)
             return
 
         reply = generate_reply(text, sender)

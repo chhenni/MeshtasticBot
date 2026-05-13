@@ -156,6 +156,96 @@ def get_forecast(lat: float, lon: float) -> list[dict] | None:
     return result
 
 
+def get_forecast_24h(lat: float, lon: float) -> list[dict] | None:
+    """
+    Fetch and return an hourly forecast for the next 24 hours from yr.no.
+    Each entry: {dt, hour, temp, precip, symbol, wind}
+    Returns None on error.
+    """
+    try:
+        resp = requests.get(
+            FORECAST_URL,
+            params={"lat": round(lat, 4), "lon": round(lon, 4)},
+            headers={"User-Agent": USER_AGENT},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        timeseries = resp.json()["properties"]["timeseries"]
+    except (requests.RequestException, KeyError, ValueError) as e:
+        log.error(f"Failed to fetch 24h forecast: {e}")
+        return None
+
+    now = datetime.now(tz=timezone.utc)
+    result = []
+
+    for entry in timeseries:
+        dt = datetime.fromisoformat(entry["time"].replace("Z", "+00:00"))
+        if dt < now:
+            continue
+        if len(result) >= 24:
+            break
+
+        details = entry["data"]["instant"]["details"]
+        temp = details.get("air_temperature")
+        wind = details.get("wind_speed", 0.0)
+
+        precip = (
+            entry["data"]
+            .get("next_1_hours", {})
+            .get("details", {})
+            .get("precipitation_amount", 0.0)
+        )
+        sym_code = (
+            entry["data"]
+            .get("next_1_hours", {})
+            .get("summary", {})
+            .get("symbol_code", "")
+        )
+        symbol = _symbol_to_no(sym_code) if sym_code else ""
+
+        result.append({
+            "dt": dt,
+            "hour": dt.strftime("%H"),
+            "temp": round(temp) if temp is not None else None,
+            "precip": round(precip, 1),
+            "symbol": symbol,
+            "wind": round(wind, 1),
+        })
+
+    return result
+
+
+def format_forecast_24h_messages(forecast: list[dict], lat: float, lon: float) -> list[str]:
+    """
+    Format a 24-hour hourly forecast into Meshtastic-safe messages (<190 chars each).
+    Groups entries 6 per message for readability.
+    Each message is labelled [N/total] when there are multiple parts.
+    """
+    MAX_LEN = 185
+    HOURS_PER_MSG = 6
+
+    header = f"24t varsel {lat:.2f}N {lon:.2f}E:"
+    lines = []
+    for h in forecast:
+        temp = f"{h['temp']}C" if h["temp"] is not None else "?C"
+        precip = f" {h['precip']}mm" if h["precip"] > 0 else ""
+        day_label = h["dt"].strftime("(%d.%m)") if h["dt"].hour == 0 else ""
+        day_part = f" {day_label}" if day_label else ""
+        lines.append(f"{h['hour']}:{temp} {h['symbol']},{h['wind']}m/s{precip}{day_part}")
+
+    # Pack lines into pages of HOURS_PER_MSG, respecting MAX_LEN
+    pages: list[str] = []
+    for i in range(0, len(lines), HOURS_PER_MSG):
+        chunk = lines[i:i + HOURS_PER_MSG]
+        page = header + "\n" + "\n".join(chunk) if i == 0 else "\n".join(chunk)
+        pages.append(page)
+
+    total = len(pages)
+    if total == 1:
+        return pages
+    return [f"[{i + 1}/{total}] {page}" for i, page in enumerate(pages)]
+
+
 def format_forecast_messages(forecast: list[dict], lat: float, lon: float) -> list[str]:
     """
     Split a 7-day forecast into a list of Meshtastic-safe messages (<200 chars each).
