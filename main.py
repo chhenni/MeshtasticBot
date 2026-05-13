@@ -8,12 +8,15 @@ Configuration is loaded from config.yaml. See config.yaml for available options.
 import time
 import threading
 import logging
+from datetime import datetime, timezone
 
 import yaml
 import meshtastic.serial_interface
 import meshtastic.tcp_interface
 import meshtastic.ble_interface
 from pubsub import pub
+
+from db import init_db, store_message, get_recent_messages
 
 from weather import get_lightning_alerts, format_alert_message, \
     get_node_position, get_forecast, format_forecast_messages, \
@@ -69,7 +72,8 @@ HELP_MESSAGES = [
     "/bandplan <bånd> - Vis båndplan\n"
     "/bandplan_check <freq> - Sjekk frekvens\n"
     "/calling <bånd> - Anropsfrekvenser\n"
-    "/mvhf [kanal] - Marin VHF kanaler",
+    "/mvhf [kanal] - Marin VHF kanaler\n"
+    "/krslog [t] - Meldingslogg (std: 24t)",
 
     "Info [3/3]:\n"
     "- Kommandoer funker via DM\n"
@@ -231,7 +235,50 @@ def handle_mvhf_command(text: str, reply_fn) -> None:
         reply_fn(msg)
 
 
-def make_receive_handler(interface, channel: int):
+def handle_krslog_command(text: str, reply_fn, db_conn, log_channel: int) -> None:
+    """Return recent messages from the log channel. Optional arg overrides the hour window."""
+    parts = text.strip().split(maxsplit=1)
+    hours = 24
+    if len(parts) >= 2:
+        try:
+            hours = int(parts[1].strip())
+            if hours < 1:
+                raise ValueError
+        except ValueError:
+            reply_fn("Bruk: /krslog [antall timer]\nEks: /krslog 48")
+            return
+
+    if db_conn is None:
+        reply_fn("Meldingslogg er ikke aktivert.")
+        return
+
+    rows = get_recent_messages(db_conn, log_channel, hours)
+    if not rows:
+        reply_fn(f"Ingen meldinger siste {hours}t.")
+        return
+
+    log.info(f"/krslog {hours}h — {len(rows)} message(s)")
+
+    # Format into pages of up to ~5 messages each to stay within packet limits
+    PAGE_SIZE = 5
+    pages = []
+    for i in range(0, len(rows), PAGE_SIZE):
+        chunk = rows[i:i + PAGE_SIZE]
+        lines = []
+        for r in chunk:
+            ts = r["received_at"][11:16]  # HH:MM from ISO timestamp
+            lines.append(f"{ts} {r['sender_id']}: {r['text']}")
+        pages.append("\n".join(lines))
+
+    total_pages = len(pages)
+    for i, page in enumerate(pages):
+        if i > 0:
+            time.sleep(3)
+        header = f"Logg siste {hours}t [{i+1}/{total_pages}]:\n"
+        reply_fn(header + page)
+
+
+def make_receive_handler(interface, channel: int, db_conn=None, log_channel: int | None = None):
     def on_receive(packet, interface=interface):
         decoded = packet.get("decoded", {})
         text = decoded.get("text", "").strip()
@@ -241,19 +288,25 @@ def make_receive_handler(interface, channel: int):
         sender = packet.get("fromId", "unknown")
         to_id = packet.get("toId", "^all")
         is_dm = to_id != "^all"
+        pkt_channel = packet.get("channel", 0)
 
         if is_dm:
             log.info(f"[DM from {sender}]: {text}")
             def reply_fn(msg, _to=sender):
                 log.info(f"[DM to {_to}]: {msg}")
                 interface.sendText(msg, destinationId=_to, channelIndex=0)
-        elif packet.get("channel", 0) == channel:
+        elif pkt_channel == channel:
             log.info(f"[ch{channel} from {sender}]: {text}")
             def reply_fn(msg, _ch=channel, _to=sender):
                 log.info(f"[ch{_ch} to {_to}]: {msg}")
                 interface.sendText(msg, channelIndex=_ch)
         else:
             return
+
+        if db_conn is not None and not is_dm and pkt_channel == log_channel:
+            packet_id = str(packet.get("id", ""))
+            received_at = datetime.now(timezone.utc).isoformat()
+            store_message(db_conn, packet_id, pkt_channel, sender, text, received_at)
 
         if text.lower().startswith("/help"):
             handle_help_command(reply_fn)
@@ -273,6 +326,10 @@ def make_receive_handler(interface, channel: int):
 
         if text.lower().startswith("/mvhf"):
             handle_mvhf_command(text, reply_fn)
+            return
+
+        if text.lower().startswith("/krslog"):
+            handle_krslog_command(text, reply_fn, db_conn, log_channel)
             return
 
         if text.lower().startswith("/bandplan_check"):
@@ -324,7 +381,16 @@ def main():
     channel = cfg.get("channel", 2)
 
     interface = connect(cfg)
-    handler = make_receive_handler(interface, channel)
+
+    msg_log_cfg = cfg.get("message_log", {})
+    db_conn = None
+    log_channel = None
+    if msg_log_cfg.get("enabled", False):
+        log_channel = int(msg_log_cfg.get("channel", 1))
+        db_path = msg_log_cfg.get("db_path", "messages.db")
+        db_conn = init_db(db_path)
+
+    handler = make_receive_handler(interface, channel, db_conn=db_conn, log_channel=log_channel)
     pub.subscribe(handler, "meshtastic.receive.text")
     log.info(f"Bot ready — listening on channel {channel}. Press Ctrl+C to stop.")
 

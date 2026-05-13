@@ -16,6 +16,12 @@ connection:
   # ble: leave 'address' unset for auto-detection, or set a MAC / device name:
   # address: "AA:BB:CC:DD:EE:FF"
 
+# Message logging — stores broadcast messages from the specified channel to SQLite
+message_log:
+  enabled: true
+  channel: 1          # channel index to log (independent of the bot's reply channel)
+  db_path: messages.db
+
 # Weather alert settings (Norwegian Meteorological Institute MetAlerts API)
 weather:
   enabled: true
