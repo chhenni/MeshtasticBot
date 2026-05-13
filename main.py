@@ -57,17 +57,20 @@ def connect(cfg: dict):
 
 
 HELP_MESSAGES = [
-    "MeshtasticBot kommandoer [1/2]:\n"
-    "/help - Vis denne hjelpen\n"
-    "/weather - 7-dagers varsel (krever GPS)\n"
-    "/24hour (/24h) - Timevarsel neste 24t (krever GPS)\n"
-    "/radio - Amatørradio båndkondisjon\n"
-    "/bandplan <bånd> - Båndplan (eks: /bandplan 20m)\n"
-    "/bandplan_check <freq> - Tillatt bruk på freq (eks: /bandplan_check 14.225)",
+    "Kommandoer [1/3]:\n"
+    "/help - Vis hjelp\n"
+    "/weather - 7-dagers varsel (GPS)\n"
+    "/24hour|/24h - 24t timevarsel (GPS)",
 
-    "MeshtasticBot info [2/2]:\n"
-    "- Send kommandoer som DM\n"
-    "- GPS-posisjon må deles for værvarsler\n"
+    "Kommandoer [2/3]:\n"
+    "/radio - HF/VHF båndkondisjon\n"
+    "/bandplan <bånd> - Vis båndplan\n"
+    "/bandplan_check <freq> - Sjekk frekvens",
+
+    "Info [3/3]:\n"
+    "- Kommandoer funker via DM\n"
+    "- GPS må deles for værvarsler\n"
+    "- Lynnvarsler sendes automatisk",
 ]
 
 
