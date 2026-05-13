@@ -62,14 +62,11 @@ def generate_reply(text: str, sender_id: str) -> str | None:
     return f"Echo from bot: {text}"
 
 
-def handle_weather_command(interface, channel: int, sender_id: str) -> None:
+def handle_weather_command(interface, reply_fn, sender_id: str) -> None:
     """Look up sender position, fetch 7-day forecast, send multi-message reply."""
     pos = get_node_position(interface, sender_id)
     if pos is None:
-        interface.sendText(
-            "Ingen GPS-posisjon funnet for din node. Del posisjon og prøv igjen.",
-            channelIndex=channel,
-        )
+        reply_fn("Ingen GPS-posisjon funnet for din node. Del posisjon og prøv igjen.")
         return
 
     lat, lon = pos
@@ -77,25 +74,22 @@ def handle_weather_command(interface, channel: int, sender_id: str) -> None:
     forecast = get_forecast(lat, lon)
 
     if forecast is None:
-        interface.sendText("Klarte ikke hente varsel fra yr.no.", channelIndex=channel)
+        reply_fn("Klarte ikke hente varsel fra yr.no.")
         return
 
     messages = format_forecast_messages(forecast, lat, lon)
     for i, msg in enumerate(messages):
         if i > 0:
             time.sleep(3)
-        interface.sendText(msg, channelIndex=channel)
+        reply_fn(msg)
         log.info(f"/weather reply {i + 1}/{len(messages)}: {msg}")
 
 
-def handle_24h_command(interface, channel: int, sender_id: str) -> None:
+def handle_24h_command(interface, reply_fn, sender_id: str) -> None:
     """Look up sender position, fetch 24-hour forecast, send multi-message reply."""
     pos = get_node_position(interface, sender_id)
     if pos is None:
-        interface.sendText(
-            "Ingen GPS-posisjon funnet for din node. Del posisjon og prøv igjen.",
-            channelIndex=channel,
-        )
+        reply_fn("Ingen GPS-posisjon funnet for din node. Del posisjon og prøv igjen.")
         return
 
     lat, lon = pos
@@ -103,42 +97,49 @@ def handle_24h_command(interface, channel: int, sender_id: str) -> None:
     forecast = get_forecast_24h(lat, lon)
 
     if forecast is None:
-        interface.sendText("Klarte ikke hente varsel fra yr.no.", channelIndex=channel)
+        reply_fn("Klarte ikke hente varsel fra yr.no.")
         return
 
     messages = format_forecast_24h_messages(forecast, lat, lon)
     for i, msg in enumerate(messages):
         if i > 0:
             time.sleep(3)
-        interface.sendText(msg, channelIndex=channel)
+        reply_fn(msg)
         log.info(f"/24hour reply {i + 1}/{len(messages)}: {msg}")
 
 
 def make_receive_handler(interface, channel: int):
     def on_receive(packet, interface=interface):
-        if packet.get("channel", 0) != channel:
-            return
-
         decoded = packet.get("decoded", {})
         text = decoded.get("text", "").strip()
         if not text:
             return
 
         sender = packet.get("fromId", "unknown")
-        log.info(f"[ch{channel}] {sender}: {text}")
+        to_id = packet.get("toId", "^all")
+        is_dm = to_id != "^all"
+
+        if is_dm:
+            log.info(f"[DM] {sender}: {text}")
+            reply_fn = lambda msg: interface.sendText(msg, destinationId=sender, channelIndex=0)
+        elif packet.get("channel", 0) == channel:
+            log.info(f"[ch{channel}] {sender}: {text}")
+            reply_fn = lambda msg: interface.sendText(msg, channelIndex=channel)
+        else:
+            return
 
         if text.lower().startswith("/weather"):
-            handle_weather_command(interface, channel, sender)
+            handle_weather_command(interface, reply_fn, sender)
             return
 
         if text.lower().startswith("/24hour"):
-            handle_24h_command(interface, channel, sender)
+            handle_24h_command(interface, reply_fn, sender)
             return
 
         reply = generate_reply(text, sender)
         if reply:
-            interface.sendText(reply, channelIndex=channel)
-            log.info(f"[ch{channel}] → {reply}")
+            reply_fn(reply)
+            log.info(f"→ {reply}")
 
     return on_receive
 
