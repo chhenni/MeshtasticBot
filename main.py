@@ -15,7 +15,8 @@ import meshtastic.tcp_interface
 import meshtastic.ble_interface
 from pubsub import pub
 
-from weather import get_lightning_alerts, format_alert_message
+from weather import get_lightning_alerts, format_alert_message, \
+    get_node_position, get_forecast, format_forecast_messages
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -55,8 +56,35 @@ def generate_reply(text: str, sender_id: str) -> str | None:
     """
     Return a reply string, or None to stay silent.
     Customize this function to implement your bot logic.
+    Note: /weather is handled separately in make_receive_handler.
     """
     return f"Echo from bot: {text}"
+
+
+def handle_weather_command(interface, channel: int, sender_id: str) -> None:
+    """Look up sender position, fetch forecast, send multi-message reply."""
+    pos = get_node_position(interface, sender_id)
+    if pos is None:
+        interface.sendText(
+            "Ingen GPS-posisjon funnet for din node. Del posisjon og prøv igjen.",
+            channelIndex=channel,
+        )
+        return
+
+    lat, lon = pos
+    log.info(f"/weather requested by {sender_id} at ({lat}, {lon})")
+    forecast = get_forecast(lat, lon)
+
+    if forecast is None:
+        interface.sendText("Klarte ikke hente varsel fra yr.no.", channelIndex=channel)
+        return
+
+    messages = format_forecast_messages(forecast, lat, lon)
+    for i, msg in enumerate(messages):
+        if i > 0:
+            time.sleep(1)  # Brief pause between messages to avoid flooding
+        interface.sendText(msg, channelIndex=channel)
+        log.info(f"/weather reply {i + 1}/{len(messages)}: {msg}")
 
 
 def make_receive_handler(interface, channel: int):
@@ -65,12 +93,16 @@ def make_receive_handler(interface, channel: int):
             return
 
         decoded = packet.get("decoded", {})
-        text = decoded.get("text")
+        text = decoded.get("text", "").strip()
         if not text:
             return
 
         sender = packet.get("fromId", "unknown")
         log.info(f"[ch{channel}] {sender}: {text}")
+
+        if text.lower().startswith("/weather"):
+            handle_weather_command(interface, channel, sender)
+            return
 
         reply = generate_reply(text, sender)
         if reply:
