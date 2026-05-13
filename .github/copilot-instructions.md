@@ -47,6 +47,6 @@ python main.py
 |---|---|
 | `/help` | Lists all available commands (two messages) |
 | `/weather` | 7-day daily forecast from yr.no (requires node GPS position) |
-| `/24hour` | Hourly forecast for next 24 hours from yr.no (requires node GPS position) |
+| `/24hour` (`/24h`) | Hourly forecast for next 24 hours from yr.no (requires node GPS position) |
 
 **Rule: whenever a new command is added, always add it to both this table and the `HELP_MESSAGES` list in `main.py`.**

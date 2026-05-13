@@ -57,12 +57,11 @@ HELP_MESSAGES = [
     "MeshtasticBot kommandoer [1/2]:\n"
     "/help - Vis denne hjelpen\n"
     "/weather - 7-dagers varsel (krever GPS)\n"
-    "/24hour - Timevarsel neste 24t (krever GPS)",
+    "/24hour (/24h) - Timevarsel neste 24t (krever GPS)",
 
     "MeshtasticBot info [2/2]:\n"
-    "- Send kommandoer i kanal eller som DM\n"
+    "- Send kommandoer som DM\n"
     "- GPS-posisjon må deles for værvarsler\n"
-    "- Lynnvarsler sendes automatisk ved fare",
 ]
 
 
@@ -156,7 +155,7 @@ def make_receive_handler(interface, channel: int):
             handle_weather_command(interface, reply_fn, sender)
             return
 
-        if text.lower().startswith("/24hour"):
+        if text.lower().startswith("/24hour") or text.lower().startswith("/24h"):
             handle_24h_command(interface, reply_fn, sender)
             return
 
