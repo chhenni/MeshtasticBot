@@ -17,7 +17,8 @@ from pubsub import pub
 
 from weather import get_lightning_alerts, format_alert_message, \
     get_node_position, get_forecast, format_forecast_messages, \
-    get_forecast_24h, format_forecast_24h_messages
+    get_forecast_24h, format_forecast_24h_messages, \
+    get_radio_forecast, format_radio_messages
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -57,7 +58,8 @@ HELP_MESSAGES = [
     "MeshtasticBot kommandoer [1/2]:\n"
     "/help - Vis denne hjelpen\n"
     "/weather - 7-dagers varsel (krever GPS)\n"
-    "/24hour (/24h) - Timevarsel neste 24t (krever GPS)",
+    "/24hour (/24h) - Timevarsel neste 24t (krever GPS)\n"
+    "/radio - Amatørradio båndkondisjon",
 
     "MeshtasticBot info [2/2]:\n"
     "- Send kommandoer som DM\n"
@@ -127,6 +129,20 @@ def handle_24h_command(interface, reply_fn, sender_id: str) -> None:
         log.info(f"/24hour reply {i + 1}/{len(messages)}: {msg}")
 
 
+def handle_radio_command(reply_fn) -> None:
+    """Fetch amateur radio band conditions and send as multi-message reply."""
+    data = get_radio_forecast()
+    if data is None:
+        reply_fn("Klarte ikke hente radiokondisjon fra HamQSL.")
+        return
+    messages = format_radio_messages(data)
+    for i, msg in enumerate(messages):
+        if i > 0:
+            time.sleep(3)
+        reply_fn(msg)
+        log.info(f"/radio reply {i + 1}/{len(messages)}: {msg}")
+
+
 def make_receive_handler(interface, channel: int):
     def on_receive(packet, interface=interface):
         decoded = packet.get("decoded", {})
@@ -157,6 +173,10 @@ def make_receive_handler(interface, channel: int):
 
         if text.lower().startswith("/24hour") or text.lower().startswith("/24h"):
             handle_24h_command(interface, reply_fn, sender)
+            return
+
+        if text.lower().startswith("/radio"):
+            handle_radio_command(reply_fn)
             return
 
         reply = generate_reply(text, sender)

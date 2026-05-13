@@ -49,4 +49,6 @@ python main.py
 | `/weather` | 7-day daily forecast from yr.no (requires node GPS position) |
 | `/24hour` (`/24h`) | Hourly forecast for next 24 hours from yr.no (requires node GPS position) |
 
+| `/radio` | Amateur radio HF/VHF band conditions, solar flux and K-index via HamQSL |
+
 **Rule: whenever a new command is added, always add it to both this table and the `HELP_MESSAGES` list in `main.py`.**
