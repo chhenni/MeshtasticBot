@@ -80,7 +80,7 @@ def generate_reply(text: str, sender_id: str) -> str | None:
     Customize this function to implement your bot logic.
     Note: commands are handled separately in make_receive_handler.
     """
-    return f"Echo from bot: {text}"
+    return None
 
 
 def handle_weather_command(interface, reply_fn, sender_id: str) -> None:
