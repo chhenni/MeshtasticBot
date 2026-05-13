@@ -54,3 +54,8 @@ python main.py
 | `/bandplan_check <freq>` | Look up allowed usage for a frequency. Accepts MHz, kHz or bare number (e.g. `/bandplan_check 14.225`, `/bandplan_check 14225 kHz`) |
 
 **Rule: whenever a new command is added, always add it to both this table and the `HELP_MESSAGES` list in `main.py`.**
+
+## Docker
+
+- `Dockerfile` uses `COPY *.py ./` — all Python source files are included automatically. No manual updates needed when adding new `.py` files.
+- `config.yaml` is mounted at runtime via `-v ./config.yaml:/app/config.yaml`, not baked into the image.
