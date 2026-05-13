@@ -19,7 +19,8 @@ from weather import get_lightning_alerts, format_alert_message, \
     get_node_position, get_forecast, format_forecast_messages, \
     get_forecast_24h, format_forecast_24h_messages, \
     get_radio_forecast, format_radio_messages
-from bandplan import BANDPLAN, resolve_band, format_bandplan_messages
+from bandplan import BANDPLAN, resolve_band, format_bandplan_messages, \
+    parse_frequency_mhz, lookup_frequency
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -61,7 +62,8 @@ HELP_MESSAGES = [
     "/weather - 7-dagers varsel (krever GPS)\n"
     "/24hour (/24h) - Timevarsel neste 24t (krever GPS)\n"
     "/radio - Amatørradio båndkondisjon\n"
-    "/bandplan <bånd> - Båndplan (eks: /bandplan 20m)",
+    "/bandplan <bånd> - Båndplan (eks: /bandplan 20m)\n"
+    "/bandplan_check <freq> - Tillatt bruk på freq (eks: /bandplan_check 14.225)",
 
     "MeshtasticBot info [2/2]:\n"
     "- Send kommandoer som DM\n"
@@ -145,6 +147,28 @@ def handle_radio_command(reply_fn) -> None:
         log.info(f"/radio reply {i + 1}/{len(messages)}: {msg}")
 
 
+def handle_bandplan_check_command(text: str, reply_fn) -> None:
+    """Parse a frequency from command text and reply with the allowed usage."""
+    parts = text.strip().split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        reply_fn("Bruk: /bandplan_check <frekvens>\nEks: /bandplan_check 14.225\n     /bandplan_check 144300 kHz")
+        return
+
+    freq_mhz = parse_frequency_mhz(parts[1])
+    if freq_mhz is None:
+        reply_fn(f"Kunne ikke tolke frekvens: '{parts[1]}'.\nEks: 14.225 / 14.225 MHz / 14225 kHz")
+        return
+
+    result = lookup_frequency(freq_mhz)
+    if result is None:
+        reply_fn(f"{freq_mhz:.4f} MHz er ikke innenfor et amatørradio-bånd (IARU Region 1).")
+        return
+
+    band, freq_range, mode = result
+    reply_fn(f"{freq_mhz:.4f} MHz → {band}\n{freq_range} MHz\n{mode}")
+    log.info(f"/bandplan_check {freq_mhz} MHz -> {band} {mode}")
+
+
 def handle_bandplan_command(text: str, reply_fn) -> None:
     """Parse band from command text and send band plan segments."""
     parts = text.strip().split(maxsplit=1)
@@ -202,6 +226,10 @@ def make_receive_handler(interface, channel: int):
 
         if text.lower().startswith("/radio"):
             handle_radio_command(reply_fn)
+            return
+
+        if text.lower().startswith("/bandplan_check"):
+            handle_bandplan_check_command(text, reply_fn)
             return
 
         if text.lower().startswith("/bandplan"):

@@ -51,5 +51,6 @@ python main.py
 
 | `/radio` | Amateur radio HF/VHF band conditions, solar flux and K-index via HamQSL |
 | `/bandplan <band>` | IARU Region 1 band plan for a specific band (e.g. `/bandplan 20m`). Supported: 160m, 80m, 60m, 40m, 30m, 20m, 17m, 15m, 12m, 10m, 6m, 2m, 70cm |
+| `/bandplan_check <freq>` | Look up allowed usage for a frequency. Accepts MHz, kHz or bare number (e.g. `/bandplan_check 14.225`, `/bandplan_check 14225 kHz`) |
 
 **Rule: whenever a new command is added, always add it to both this table and the `HELP_MESSAGES` list in `main.py`.**
