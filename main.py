@@ -82,7 +82,7 @@ def handle_weather_command(interface, channel: int, sender_id: str) -> None:
     messages = format_forecast_messages(forecast, lat, lon)
     for i, msg in enumerate(messages):
         if i > 0:
-            time.sleep(1)  # Brief pause between messages to avoid flooding
+            time.sleep(3)  # Give the mesh time to propagate before sending the next part
         interface.sendText(msg, channelIndex=channel)
         log.info(f"/weather reply {i + 1}/{len(messages)}: {msg}")
 

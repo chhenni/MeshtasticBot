@@ -121,11 +121,14 @@ def get_forecast(lat: float, lon: float) -> list[dict] | None:
             for _, e in entries
             if "air_temperature" in e["data"]["instant"]["details"]
         ]
-        # Sum hourly precipitation for the day
-        precip = sum(
-            e["data"].get("next_1_hours", {}).get("details", {}).get("precipitation_amount", 0.0)
-            for _, e in entries
-        )
+        # Sum precipitation: use 1h entries where available, fall back to 6h for later days
+        precip = 0.0
+        for _, e in entries:
+            data = e["data"]
+            if "next_1_hours" in data:
+                precip += data["next_1_hours"]["details"].get("precipitation_amount", 0.0)
+            elif "next_6_hours" in data:
+                precip += data["next_6_hours"]["details"].get("precipitation_amount", 0.0)
 
         # Use noon entry for representative symbol + wind; fall back to midpoint
         noon = [(dt, e) for dt, e in entries if dt.hour == 12]
@@ -156,8 +159,9 @@ def get_forecast(lat: float, lon: float) -> list[dict] | None:
 def format_forecast_messages(forecast: list[dict], lat: float, lon: float) -> list[str]:
     """
     Split a 7-day forecast into a list of Meshtastic-safe messages (<200 chars each).
+    Each message is labelled [part/total] so the receiver knows more are coming.
     """
-    MAX_LEN = 190
+    MAX_LEN = 185  # leave room for part label
 
     header = f"Varsel {lat:.2f}N {lon:.2f}E:"
     lines = []
@@ -173,19 +177,24 @@ def format_forecast_messages(forecast: list[dict], lat: float, lon: float) -> li
             f"{d['symbol']}, {temp}, {d['wind']}m/s{precip}"
         )
 
-    messages: list[str] = []
+    # Build pages without part labels first
+    pages: list[str] = []
     current = header
     for line in lines:
         candidate = current + "\n" + line
         if len(candidate) > MAX_LEN and current != header:
-            messages.append(current)
+            pages.append(current)
             current = line
         else:
             current = candidate
     if current:
-        messages.append(current)
+        pages.append(current)
 
-    return messages
+    # Prepend [N/total] only when there are multiple pages
+    total = len(pages)
+    if total == 1:
+        return pages
+    return [f"[{i + 1}/{total}] {page}" for i, page in enumerate(pages)]
 
 
 # ---------------------------------------------------------------------------
