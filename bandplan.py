@@ -168,6 +168,72 @@ BANDPLAN: dict[str, dict] = {
     },
 }
 
+# Norwegian/IARU Region 1 calling frequencies per band.
+# Each entry: (frequency_mhz, mode, description)
+CALLING_FREQUENCIES: dict[str, list[tuple]] = {
+    "160m": [
+        (1.843,   "SSB",   "SSB anropsfrekvens"),
+        (1.810,   "CW",    "CW anropsfrekvens"),
+    ],
+    "80m": [
+        (3.760,   "SSB",   "SSB anropsfrekvens (Region 1)"),
+        (3.690,   "AM",    "AM anropsfrekvens"),
+        (3.560,   "CW",    "CW QRP anropsfrekvens"),
+    ],
+    "60m": [
+        (5.3985,  "USB",   "Internasjonalt nødanrop (ITU)"),
+    ],
+    "40m": [
+        (7.090,   "SSB",   "SSB anropsfrekvens (Region 1)"),
+        (7.030,   "CW",    "CW QRP anropsfrekvens"),
+    ],
+    "30m": [
+        (10.116,  "CW",    "CW anropsfrekvens"),
+    ],
+    "20m": [
+        (14.300,  "SSB",   "SSB anropsfrekvens"),
+        (14.225,  "SSTV",  "SSTV anropsfrekvens"),
+        (14.195,  "SSB",   "DX-ekspedisjon prioritert"),
+        (14.060,  "CW",    "CW QRP anropsfrekvens"),
+    ],
+    "17m": [
+        (18.130,  "SSB",   "SSB anropsfrekvens"),
+        (18.096,  "CW",    "CW QRP anropsfrekvens"),
+    ],
+    "15m": [
+        (21.360,  "SSB",   "SSB anropsfrekvens"),
+        (21.340,  "SSTV",  "SSTV anropsfrekvens"),
+        (21.285,  "AM",    "AM anropsfrekvens"),
+        (21.110,  "CW",    "CW QRP anropsfrekvens"),
+    ],
+    "12m": [
+        (24.960,  "SSB",   "SSB anropsfrekvens"),
+        (24.906,  "CW",    "CW QRP anropsfrekvens"),
+    ],
+    "10m": [
+        (28.500,  "SSB",   "SSB anropsfrekvens"),
+        (29.000,  "FM",    "FM anropsfrekvens"),
+        (28.360,  "SSB",   "QRP anropsfrekvens"),
+        (28.285,  "AM",    "AM anropsfrekvens"),
+    ],
+    "6m": [
+        (50.110,  "SSB",   "DX/SSB anropsfrekvens"),
+        (51.510,  "FM",    "FM anropsfrekvens"),
+        (50.090,  "CW",    "CW anropsfrekvens"),
+    ],
+    "2m": [
+        (144.300, "SSB",   "SSB anropsfrekvens"),
+        (145.500, "FM",    "FM anropsfrekvens (nasjonal)"),
+        (144.050, "CW",    "CW/EME anropsfrekvens"),
+        (144.800, "APRS",  "APRS"),
+    ],
+    "70cm": [
+        (432.200, "SSB",   "SSB anropsfrekvens"),
+        (433.500, "FM",    "FM anropsfrekvens (nasjonal)"),
+        (432.010, "CW",    "CW/EME anropsfrekvens"),
+    ],
+}
+
 # Aliases for common alternate band names
 BAND_ALIASES: dict[str, str] = {
     "1.8m": "160m", "1.8": "160m", "160": "160m",
@@ -202,11 +268,14 @@ def parse_frequency_mhz(freq_str: str) -> float | None:
     Returns None if unparseable.
     """
     s = freq_str.strip().lower().replace(",", ".")
-    m = re.match(r"([\d.]+)\s*(mhz|khz)?$", s)
+    m = re.match(r"(\d+\.?\d*|\d*\.\d+)\s*(mhz|khz)?$", s)
     if not m:
         return None
 
-    value = float(m.group(1))
+    try:
+        value = float(m.group(1))
+    except ValueError:
+        return None
     unit = m.group(2)
 
     if unit == "khz":
@@ -266,3 +335,36 @@ def format_bandplan_messages(band: str) -> list[str]:
         return pages
     return [f"[{i + 1}/{total}] {page}" for i, page in enumerate(pages)]
 
+
+def format_calling_messages(band: str) -> list[str]:
+    """
+    Format calling frequencies for a band into Meshtastic-safe messages (<=200 UTF-8 bytes).
+    """
+    MAX_BYTES = 200
+    freqs = CALLING_FREQUENCIES[band]
+    header = f"Anropsfrekvenser {band}:"
+    lines = [f"{freq:.4g} MHz {mode} - {desc}" for freq, mode, desc in freqs]
+
+    pages: list[str] = []
+    current_lines: list[str] = []
+    include_header = True
+
+    for line in lines:
+        candidate = (header + "\n" + "\n".join(current_lines + [line])
+                     if include_header else "\n".join(current_lines + [line]))
+        if current_lines and len(candidate.encode("utf-8")) > MAX_BYTES:
+            pages.append(header + "\n" + "\n".join(current_lines)
+                         if include_header else "\n".join(current_lines))
+            current_lines = [line]
+            include_header = False
+        else:
+            current_lines.append(line)
+
+    if current_lines:
+        pages.append(header + "\n" + "\n".join(current_lines)
+                     if include_header else "\n".join(current_lines))
+
+    total = len(pages)
+    if total == 1:
+        return pages
+    return [f"[{i + 1}/{total}] {page}" for i, page in enumerate(pages)]

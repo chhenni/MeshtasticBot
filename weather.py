@@ -337,9 +337,12 @@ def get_lightning_alerts(county: str) -> list[dict]:
         # Skip expired alerts
         interval = feature.get("when", {}).get("interval", [])
         if len(interval) == 2:
-            end = datetime.fromisoformat(interval[1])
-            if end < now:
-                continue
+            try:
+                end = datetime.fromisoformat(interval[1])
+                if end < now:
+                    continue
+            except ValueError:
+                pass  # Malformed timestamp — include alert to be safe
 
         result.append({
             "id": props.get("id", ""),

@@ -19,8 +19,10 @@ from weather import get_lightning_alerts, format_alert_message, \
     get_node_position, get_forecast, format_forecast_messages, \
     get_forecast_24h, format_forecast_24h_messages, \
     get_radio_forecast, format_radio_messages
-from bandplan import BANDPLAN, resolve_band, format_bandplan_messages, \
+from bandplan import BANDPLAN, CALLING_FREQUENCIES, resolve_band, \
+    format_bandplan_messages, format_calling_messages, \
     parse_frequency_mhz, lookup_frequency
+from marine import format_mvhf_list_messages, format_mvhf_channel
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -65,7 +67,9 @@ HELP_MESSAGES = [
     "Kommandoer [2/3]:\n"
     "/radio - HF/VHF båndkondisjon\n"
     "/bandplan <bånd> - Vis båndplan\n"
-    "/bandplan_check <freq> - Sjekk frekvens",
+    "/bandplan_check <freq> - Sjekk frekvens\n"
+    "/calling <bånd> - Anropsfrekvenser\n"
+    "/mvhf [kanal] - Marin VHF kanaler",
 
     "Info [3/3]:\n"
     "- Kommandoer funker via DM\n"
@@ -110,7 +114,6 @@ def handle_weather_command(interface, reply_fn, sender_id: str) -> None:
         if i > 0:
             time.sleep(3)
         reply_fn(msg)
-        log.info(f"/weather reply {i + 1}/{len(messages)}: {msg}")
 
 
 def handle_24h_command(interface, reply_fn, sender_id: str) -> None:
@@ -133,7 +136,6 @@ def handle_24h_command(interface, reply_fn, sender_id: str) -> None:
         if i > 0:
             time.sleep(3)
         reply_fn(msg)
-        log.info(f"/24hour reply {i + 1}/{len(messages)}: {msg}")
 
 
 def handle_radio_command(reply_fn) -> None:
@@ -147,7 +149,28 @@ def handle_radio_command(reply_fn) -> None:
         if i > 0:
             time.sleep(3)
         reply_fn(msg)
-        log.info(f"/radio reply {i + 1}/{len(messages)}: {msg}")
+
+
+def handle_calling_command(text: str, reply_fn) -> None:
+    """Parse band from command text and send calling frequencies."""
+    parts = text.strip().split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        available = ", ".join(CALLING_FREQUENCIES.keys())
+        reply_fn(f"Bruk: /calling <bånd>\nTilgjengelig: {available}")
+        return
+
+    band = resolve_band(parts[1])
+    if band is None or band not in CALLING_FREQUENCIES:
+        available = ", ".join(CALLING_FREQUENCIES.keys())
+        reply_fn(f"Ukjent bånd '{parts[1]}'.\nTilgjengelig: {available}")
+        return
+
+    log.info(f"/calling {band} requested")
+    messages = format_calling_messages(band)
+    for i, msg in enumerate(messages):
+        if i > 0:
+            time.sleep(3)
+        reply_fn(msg)
 
 
 def handle_bandplan_check_command(text: str, reply_fn) -> None:
@@ -192,7 +215,20 @@ def handle_bandplan_command(text: str, reply_fn) -> None:
         if i > 0:
             time.sleep(3)
         reply_fn(msg)
-        log.info(f"/bandplan reply {i + 1}/{len(messages)}: {msg}")
+
+
+def handle_mvhf_command(text: str, reply_fn) -> None:
+    """List key Marine VHF channels, or look up a specific channel."""
+    parts = text.strip().split(maxsplit=1)
+    if len(parts) >= 2 and parts[1].strip():
+        reply_fn(format_mvhf_channel(parts[1].strip()))
+        return
+
+    messages = format_mvhf_list_messages(groups=["Nød/DSC", "Havn/trafikk"])
+    for i, msg in enumerate(messages):
+        if i > 0:
+            time.sleep(3)
+        reply_fn(msg)
 
 
 def make_receive_handler(interface, channel: int):
@@ -207,11 +243,15 @@ def make_receive_handler(interface, channel: int):
         is_dm = to_id != "^all"
 
         if is_dm:
-            log.info(f"[DM] {sender}: {text}")
-            reply_fn = lambda msg: interface.sendText(msg, destinationId=sender, channelIndex=0)
+            log.info(f"[DM from {sender}]: {text}")
+            def reply_fn(msg, _to=sender):
+                log.info(f"[DM to {_to}]: {msg}")
+                interface.sendText(msg, destinationId=_to, channelIndex=0)
         elif packet.get("channel", 0) == channel:
-            log.info(f"[ch{channel}] {sender}: {text}")
-            reply_fn = lambda msg: interface.sendText(msg, channelIndex=channel)
+            log.info(f"[ch{channel} from {sender}]: {text}")
+            def reply_fn(msg, _ch=channel, _to=sender):
+                log.info(f"[ch{_ch} to {_to}]: {msg}")
+                interface.sendText(msg, channelIndex=_ch)
         else:
             return
 
@@ -231,8 +271,16 @@ def make_receive_handler(interface, channel: int):
             handle_radio_command(reply_fn)
             return
 
+        if text.lower().startswith("/mvhf"):
+            handle_mvhf_command(text, reply_fn)
+            return
+
         if text.lower().startswith("/bandplan_check"):
             handle_bandplan_check_command(text, reply_fn)
+            return
+
+        if text.lower().startswith("/calling"):
+            handle_calling_command(text, reply_fn)
             return
 
         if text.lower().startswith("/bandplan"):
@@ -242,7 +290,6 @@ def make_receive_handler(interface, channel: int):
         reply = generate_reply(text, sender)
         if reply:
             reply_fn(reply)
-            log.info(f"→ {reply}")
 
     return on_receive
 
