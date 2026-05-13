@@ -35,7 +35,18 @@ python main.py
 
 - Entry point is `main.py`. Connection settings and target channel are read from `config.yaml` at startup.
 - Meshtastic's Python SDK publishes incoming packets via `pypubsub`. Subscribe to `meshtastic.receive.text` for text messages; the packet dict includes `channel` (0-based int), `fromId` (string node ID), and `decoded.text`.
-- Replies are sent with `interface.sendText(text, channelIndex=<n>)`.
+- Replies are sent with `interface.sendText(text, channelIndex=<n>)` for channel messages, or `interface.sendText(text, destinationId=<nodeId>, channelIndex=0)` for DMs.
+- Direct messages are detected by checking `packet.get("toId") != "^all"`.
 - **Bot logic lives entirely in `generate_reply(text, sender_id)`** — return a string to reply or `None` to stay silent.
 - Connection type (serial / tcp / ble) is selected in `config.yaml` and resolved in the `connect()` function.
 - The `api.met.no` weather alerts endpoint: `https://api.met.no/weatherapi/metalerts/2.0/all.json?county=<fylkesnummer>`
+
+## Bot Commands
+
+| Command | Description |
+|---|---|
+| `/help` | Lists all available commands (two messages) |
+| `/weather` | 7-day daily forecast from yr.no (requires node GPS position) |
+| `/24hour` | Hourly forecast for next 24 hours from yr.no (requires node GPS position) |
+
+**Rule: whenever a new command is added, always add it to both this table and the `HELP_MESSAGES` list in `main.py`.**
