@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py weather.py ./
+COPY main.py weather.py bandplan.py ./
 
 # Mount config.yaml at runtime via -v ./config.yaml:/app/config.yaml
 # Serial: pass device with --device /dev/ttyUSB0
