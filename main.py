@@ -264,26 +264,37 @@ def handle_krslog_command(text: str, reply_fn, db_conn, log_channel: int) -> Non
 
     log.info(f"/krslog {hours}h — {len(rows)} message(s)")
 
-    # Format into pages of up to ~5 messages each to stay within packet limits
-    PAGE_SIZE = 5
-    pages = []
-    for i in range(0, len(rows), PAGE_SIZE):
-        chunk = rows[i:i + PAGE_SIZE]
-        lines = []
-        for r in chunk:
-            ts = r["received_at"][11:16]  # HH:MM from ISO timestamp
-            lines.append(f"{ts} {r['sender_id']}: {r['text']}")
-        pages.append("\n".join(lines))
+    header = f"Logg siste {hours}t:"
+    # Reserve bytes for the header on the first page
+    pages: list[str] = []
+    current_lines: list[str] = []
+    include_header = True
+
+    for r in rows:
+        ts = r["received_at"][11:16]  # HH:MM from ISO timestamp
+        line = f"{ts} {r['sender_id']}: {r['text']}"
+        candidate = (header + "\n" + "\n".join(current_lines + [line])
+                     if include_header else "\n".join(current_lines + [line]))
+        if current_lines and len(candidate.encode("utf-8")) > MAX_BYTES:
+            pages.append(header + "\n" + "\n".join(current_lines)
+                         if include_header else "\n".join(current_lines))
+            current_lines = [line]
+            include_header = False
+        else:
+            current_lines.append(line)
+
+    if current_lines:
+        pages.append(header + "\n" + "\n".join(current_lines)
+                     if include_header else "\n".join(current_lines))
 
     total_pages = len(pages)
     for i, page in enumerate(pages):
         if i > 0:
             time.sleep(3)
         if total_pages > 1:
-            header = f"Logg siste {hours}t [{i+1}/{total_pages}]:\n"
+            reply_fn(f"[{i+1}/{total_pages}] {page}")
         else:
-            header = f"Logg siste {hours}t:\n"
-        reply_fn(header + page)
+            reply_fn(page)
 
 
 def make_receive_handler(interface, channel: int, db_conn=None, log_channel: int | None = None):
