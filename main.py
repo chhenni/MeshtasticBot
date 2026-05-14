@@ -10,6 +10,7 @@ import threading
 import logging
 import argparse
 from datetime import datetime, timezone
+from uuid import uuid4
 
 import yaml
 import meshtastic.serial_interface
@@ -323,7 +324,8 @@ def make_receive_handler(interface, channel: int, db_conn=None, log_channel: int
             return
 
         if db_conn is not None and not is_dm and pkt_channel == log_channel:
-            packet_id = str(packet.get("id", ""))
+            raw_id = packet.get("id")
+            packet_id = str(raw_id) if raw_id else str(uuid4())
             received_at = datetime.now(timezone.utc).isoformat()
             store_message(db_conn, packet_id, pkt_channel, sender, text, received_at)
 
