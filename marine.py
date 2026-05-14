@@ -11,6 +11,8 @@ Each channel entry:
 Dict keys are strings to accommodate non-numeric channels (AIS1, L1, F1, etc.)
 """
 
+from constants import MAX_BYTES
+
 MARINE_VHF: dict[str, dict] = {
     # --- Nød / DSC ---
     "16":  {"tx": 156.800, "rx": 156.800, "duplex": False, "usage": "Nød- og kallekanal (obligatorisk lyttvakt)"},
@@ -141,7 +143,6 @@ def format_mvhf_list_messages(groups: list[str] | None = None) -> list[str]:
     Format Marine VHF channels grouped by category into Meshtastic-safe messages (<=200 UTF-8 bytes).
     If `groups` is given, only those group names are included.
     """
-    MAX_BYTES = 200
     # Reserve space for worst-case page prefix like "[14/14] " = 8 bytes
     PACK_BYTES = MAX_BYTES - 8
 

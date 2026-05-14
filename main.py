@@ -28,6 +28,8 @@ from bandplan import BANDPLAN, CALLING_FREQUENCIES, resolve_band, \
 from marine import format_mvhf_list_messages, format_mvhf_channel
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+from constants import MAX_BYTES
 log = logging.getLogger(__name__)
 
 CONFIG_FILE = "config.yaml"

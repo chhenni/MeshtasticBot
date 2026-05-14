@@ -8,6 +8,8 @@ Each segment has:
 
 import re
 
+from constants import MAX_BYTES
+
 # Each band entry:
 #   "range": human-readable frequency range string
 #   "segments": list of (display_range, mode_description, low_mhz, high_mhz)
@@ -306,7 +308,6 @@ def format_bandplan_messages(band: str) -> list[str]:
     """
     Format the band plan for a given band into Meshtastic-safe messages (<=200 UTF-8 bytes).
     """
-    MAX_BYTES = 200
     entry = BANDPLAN[band]
     header = f"Båndplan {band} ({entry['range']}):"
     lines = [f"{seg[0]}: {seg[1]}" for seg in entry["segments"]]
@@ -340,7 +341,6 @@ def format_calling_messages(band: str) -> list[str]:
     """
     Format calling frequencies for a band into Meshtastic-safe messages (<=200 UTF-8 bytes).
     """
-    MAX_BYTES = 200
     freqs = CALLING_FREQUENCIES[band]
     header = f"Anropsfrekvenser {band}:"
     lines = [f"{freq:.4g} MHz {mode} - {desc}" for freq, mode, desc in freqs]

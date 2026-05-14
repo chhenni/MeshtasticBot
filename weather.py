@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 
 import requests
 
+from constants import MAX_BYTES
+
 log = logging.getLogger(__name__)
 
 METALERTS_URL = "https://api.met.no/weatherapi/metalerts/2.0/all.json"
@@ -225,8 +227,6 @@ def format_forecast_24h_messages(forecast: list[dict], lat: float, lon: float) -
     Lines are added to each page until the byte limit would be exceeded.
     Each message is labelled [N/total] when there are multiple parts.
     """
-    MAX_BYTES = 200
-
     header = f"24t varsel {lat:.2f}N {lon:.2f}E:"
     lines = []
     for h in forecast:
@@ -437,8 +437,6 @@ def get_radio_forecast() -> dict | None:
 
 def format_radio_messages(data: dict) -> list[str]:
     """Format radio forecast into Meshtastic-safe messages (<=200 UTF-8 bytes each)."""
-    MAX_BYTES = 200
-
     lines = [
         f"📻 Radiokondisjon ({data['updated']}):",
         f"SFI:{data['sfi']} K:{data['kindex']} A:{data['aindex']}",
