@@ -21,8 +21,8 @@ from db import init_db, store_message, get_recent_messages
 from weather import get_lightning_alerts, format_alert_message, \
     get_wind_alerts, format_wind_alert_message, \
     get_node_position, get_forecast, format_forecast_messages, \
-    get_forecast_24h, format_forecast_24h_messages, \
-    get_radio_forecast, format_radio_messages
+    get_forecast_24h, format_forecast_24h_messages
+from radio import get_radio_forecast, format_radio_messages
 from bandplan import BANDPLAN, CALLING_FREQUENCIES, resolve_band, \
     format_bandplan_messages, format_calling_messages, \
     parse_frequency_mhz, lookup_frequency
