@@ -8,6 +8,7 @@ Configuration is loaded from config.yaml. See config.yaml for available options.
 import time
 import threading
 import logging
+import argparse
 from datetime import datetime, timezone
 
 import yaml
@@ -27,6 +28,7 @@ from bandplan import BANDPLAN, CALLING_FREQUENCIES, resolve_band, \
     format_bandplan_messages, format_calling_messages, \
     parse_frequency_mhz, lookup_frequency
 from marine import format_mvhf_list_messages, format_mvhf_channel
+from dummy import DummyInterface, run_dummy_loop
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -390,10 +392,19 @@ def weather_alert_loop(interface, channel: int, county: str, interval_seconds: i
 
 
 def main():
+    parser = argparse.ArgumentParser(description="MeshtasticBot")
+    parser.add_argument("--dummy", action="store_true",
+                        help="Run in dummy mode (no device required — interactive CLI)")
+    args = parser.parse_args()
+
     cfg = load_config(CONFIG_FILE)
     channel = cfg.get("channel", 2)
 
-    interface = connect(cfg)
+    if args.dummy:
+        interface = DummyInterface()
+        log.info("Dummy mode active — no device connection.")
+    else:
+        interface = connect(cfg)
 
     msg_log_cfg = cfg.get("message_log", {})
     db_conn = None
@@ -404,8 +415,6 @@ def main():
         db_conn = init_db(db_path)
 
     handler = make_receive_handler(interface, channel, db_conn=db_conn, log_channel=log_channel)
-    pub.subscribe(handler, "meshtastic.receive.text")
-    log.info(f"Bot ready — listening on channel {channel}. Press Ctrl+C to stop.")
 
     weather_cfg = cfg.get("weather", {})
     if weather_cfg.get("enabled", True):
@@ -418,13 +427,19 @@ def main():
         )
         t.start()
 
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        log.info("Shutting down.")
-    finally:
+    if args.dummy:
+        run_dummy_loop(handler, channel)
         interface.close()
+    else:
+        pub.subscribe(handler, "meshtastic.receive.text")
+        log.info(f"Bot ready — listening on channel {channel}. Press Ctrl+C to stop.")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            log.info("Shutting down.")
+        finally:
+            interface.close()
 
 
 if __name__ == "__main__":
