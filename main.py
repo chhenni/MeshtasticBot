@@ -279,7 +279,10 @@ def handle_krslog_command(text: str, reply_fn, db_conn, log_channel: int) -> Non
     for i, page in enumerate(pages):
         if i > 0:
             time.sleep(3)
-        header = f"Logg siste {hours}t [{i+1}/{total_pages}]:\n"
+        if total_pages > 1:
+            header = f"Logg siste {hours}t [{i+1}/{total_pages}]:\n"
+        else:
+            header = f"Logg siste {hours}t:\n"
         reply_fn(header + page)
 
 
