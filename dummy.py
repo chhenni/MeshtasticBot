@@ -4,6 +4,8 @@ Dummy interface for testing the bot without a physical Meshtastic device.
 Activate with:  python main.py --dummy
 """
 
+from uuid import uuid4
+
 
 # Fake GPS position used for all GPS-dependent commands (Oslo city centre)
 DUMMY_NODE_ID = "!dummy"
@@ -72,7 +74,7 @@ def run_dummy_loop(handler, channel: int) -> None:
                     "fromId": DUMMY_NODE_ID,
                     "toId": DUMMY_NODE_ID,
                     "channel": 0,
-                    "id": "0",
+                    "id": str(uuid4()),
                 }
             else:
                 packet = {
@@ -80,7 +82,7 @@ def run_dummy_loop(handler, channel: int) -> None:
                     "fromId": DUMMY_NODE_ID,
                     "toId": "^all",
                     "channel": channel,
-                    "id": "0",
+                    "id": str(uuid4()),
                 }
 
             handler(packet)
