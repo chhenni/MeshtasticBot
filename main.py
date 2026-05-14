@@ -1,6 +1,6 @@
 """
 MeshtasticBot — listens on a configured channel and replies to text messages.
-Also runs an hourly background task that sends lightning alerts via MET MetAlerts API.
+Also runs an hourly background task that sends lightning and wind alerts via MET MetAlerts API.
 
 Configuration is loaded from config.yaml. See config.yaml for available options.
 """
@@ -19,6 +19,7 @@ from pubsub import pub
 from db import init_db, store_message, get_recent_messages
 
 from weather import get_lightning_alerts, format_alert_message, \
+    get_wind_alerts, format_wind_alert_message, \
     get_node_position, get_forecast, format_forecast_messages, \
     get_forecast_24h, format_forecast_24h_messages, \
     get_radio_forecast, format_radio_messages
@@ -80,7 +81,7 @@ HELP_MESSAGES = [
     "Info [3/3]:\n"
     "- Kommandoer funker via DM\n"
     "- GPS må deles for værvarsler\n"
-    "- Lynnvarsler sendes automatisk",
+    "- Lynnvarsler og vindvarsler sendes automatisk",
 ]
 
 
@@ -354,22 +355,32 @@ def make_receive_handler(interface, channel: int, db_conn=None, log_channel: int
 
 
 def weather_alert_loop(interface, channel: int, county: str, interval_seconds: int):
-    """Background thread: checks for lightning alerts and broadcasts new ones."""
-    sent_ids: set[str] = set()
+    """Background thread: checks for lightning and wind alerts and broadcasts new ones."""
+    sent_lightning_ids: set[str] = set()
+    sent_wind_ids: set[str] = set()
 
     def check_and_send():
-        alerts = get_lightning_alerts(county)
-        new_alerts = [a for a in alerts if a["id"] not in sent_ids]
+        # Lightning alerts
+        lightning_alerts = get_lightning_alerts(county)
+        for alert in lightning_alerts:
+            if alert["id"] not in sent_lightning_ids:
+                msg = format_alert_message(alert)
+                log.info(f"Sending lightning alert to ch{channel}: {msg}")
+                interface.sendText(msg, channelIndex=channel)
+                sent_lightning_ids.add(alert["id"])
+        active_lightning_ids = {a["id"] for a in lightning_alerts}
+        sent_lightning_ids.intersection_update(active_lightning_ids)
 
-        for alert in new_alerts:
-            msg = format_alert_message(alert)
-            log.info(f"Sending lightning alert to ch{channel}: {msg}")
-            interface.sendText(msg, channelIndex=channel)
-            sent_ids.add(alert["id"])
-
-        # Prune IDs of alerts no longer returned by API to avoid unbounded growth
-        active_ids = {a["id"] for a in alerts}
-        sent_ids.intersection_update(active_ids)
+        # Wind alerts
+        wind_alerts = get_wind_alerts(county)
+        for alert in wind_alerts:
+            if alert["id"] not in sent_wind_ids:
+                msg = format_wind_alert_message(alert)
+                log.info(f"Sending wind alert to ch{channel}: {msg}")
+                interface.sendText(msg, channelIndex=channel)
+                sent_wind_ids.add(alert["id"])
+        active_wind_ids = {a["id"] for a in wind_alerts}
+        sent_wind_ids.intersection_update(active_wind_ids)
 
     log.info(f"Weather alert task started (county={county}, interval={interval_seconds}s).")
     check_and_send()  # Run immediately on startup

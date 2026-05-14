@@ -24,6 +24,9 @@ USER_AGENT = "MeshtasticBot/1.0 github.com/chhenni/MeshtasticBot"
 # MetAlerts event types that count as lightning alerts
 LIGHTNING_EVENTS = {"lightning", "thunder", "thunderstorm"}
 
+# MetAlerts event types that count as strong wind alerts
+WIND_EVENTS = {"wind", "gale"}
+
 _DAYS_NO = ["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"]
 
 _SYMBOL_MAP = {
@@ -372,6 +375,64 @@ def format_alert_message(alert: dict) -> str:
             pass
 
     msg = f"⚡ LYN-VARSEL [{severity}]: {area}. {description}{valid_until}"
+    if len(msg) > 200:
+        msg = msg[:197] + "..."
+    return msg
+
+
+# ---------------------------------------------------------------------------
+# Strong wind alerts
+# ---------------------------------------------------------------------------
+
+def get_wind_alerts(county: str) -> list[dict]:
+    """Return active strong wind alerts for the given county."""
+    alerts = fetch_alerts(county)
+    now = datetime.now(tz=timezone.utc)
+    result = []
+
+    for feature in alerts:
+        props = feature.get("properties", {})
+
+        if props.get("event", "").lower() not in WIND_EVENTS:
+            continue
+
+        interval = feature.get("when", {}).get("interval", [])
+        if len(interval) == 2:
+            try:
+                end = datetime.fromisoformat(interval[1])
+                if end < now:
+                    continue
+            except ValueError:
+                pass
+
+        result.append({
+            "id": props.get("id", ""),
+            "title": props.get("title", ""),
+            "description": props.get("description", ""),
+            "area": props.get("area", ""),
+            "severity": props.get("severity", ""),
+            "awareness_level": props.get("awareness_level", ""),
+            "valid_until": interval[1] if len(interval) == 2 else None,
+        })
+
+    return result
+
+
+def format_wind_alert_message(alert: dict) -> str:
+    """Format a wind alert into a short Meshtastic-friendly message (<200 chars)."""
+    severity = alert["severity"].upper() if alert["severity"] else ""
+    area = alert["area"]
+    description = alert["description"]
+    valid_until = ""
+
+    if alert["valid_until"]:
+        try:
+            dt = datetime.fromisoformat(alert["valid_until"])
+            valid_until = f" Gjelder til {dt.strftime('%d.%m %H:%M')} UTC."
+        except ValueError:
+            pass
+
+    msg = f"💨 VINDVARSEL [{severity}]: {area}. {description}{valid_until}"
     if len(msg) > 200:
         msg = msg[:197] + "..."
     return msg
