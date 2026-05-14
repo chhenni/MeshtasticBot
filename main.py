@@ -395,10 +395,14 @@ def main():
     parser = argparse.ArgumentParser(description="MeshtasticBot")
     parser.add_argument("--dummy", action="store_true",
                         help="Run in dummy mode (no device required — interactive CLI)")
+    parser.add_argument("--channel", type=int, default=None,
+                        help="Override the channel index from config.yaml (dummy mode only)")
     args = parser.parse_args()
 
     cfg = load_config(CONFIG_FILE)
     channel = cfg.get("channel", 2)
+    if args.channel is not None:
+        channel = args.channel
 
     if args.dummy:
         interface = DummyInterface()
