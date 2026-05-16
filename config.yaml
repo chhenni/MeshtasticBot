@@ -20,7 +20,7 @@ connection:
 message_log:
   enabled: true
   channel: 1          # channel index to log (independent of the bot's reply channel)
-  db_path: /app/data/messages.db
+  db_path: data/messages.db
   retain_days: 365    # messages older than this are deleted daily
 
 # Weather alert settings (Norwegian Meteorological Institute MetAlerts API)

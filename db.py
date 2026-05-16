@@ -5,6 +5,7 @@ Provides init_db() to open/create the database and store_message() to persist
 received channel messages with deduplication by packet ID.
 """
 
+import os
 import sqlite3
 import logging
 
@@ -24,6 +25,8 @@ CREATE TABLE IF NOT EXISTS messages (
 
 def init_db(path: str) -> sqlite3.Connection:
     """Open (or create) the SQLite database at *path* and return the connection."""
+    if path != ":memory:":
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.execute(CREATE_TABLE_SQL)
     conn.commit()
