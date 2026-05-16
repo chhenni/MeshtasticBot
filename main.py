@@ -18,6 +18,7 @@ import meshtastic.tcp_interface
 import meshtastic.ble_interface
 from pubsub import pub
 
+from web import start_web_server
 from db import init_db, store_message, get_recent_messages, purge_old_messages
 
 from weather import get_lightning_alerts, format_alert_message, \
@@ -301,7 +302,7 @@ def handle_krslog_command(text: str, reply_fn, db_conn, log_channel: int) -> Non
             reply_fn(page)
 
 
-def make_receive_handler(interface, channel: int, db_conn=None, log_channel: int | None = None):
+def make_receive_handler(interface, channel: int, db_conn=None, log_channel: int | None = None, bot_state: dict | None = None):
     def on_receive(packet, interface=interface):
         decoded = packet.get("decoded", {})
         text = decoded.get("text", "").strip()
@@ -331,6 +332,13 @@ def make_receive_handler(interface, channel: int, db_conn=None, log_channel: int
             packet_id = str(raw_id) if raw_id else str(uuid4())
             received_at = datetime.now(timezone.utc).isoformat()
             store_message(db_conn, packet_id, pkt_channel, sender, text, received_at)
+            if bot_state is not None:
+                bot_state["last_message"] = {
+                    "channel": pkt_channel,
+                    "sender_id": sender,
+                    "text": text,
+                    "received_at": received_at,
+                }
 
         if text.lower().startswith("/help"):
             handle_help_command(reply_fn)
@@ -453,18 +461,31 @@ def main():
             daemon=True,
         ).start()
 
-    handler = make_receive_handler(interface, channel, db_conn=db_conn, log_channel=log_channel)
-
     weather_cfg = cfg.get("weather", {})
+    county = str(weather_cfg.get("county", "")) if weather_cfg.get("enabled", True) else ""
+
+    bot_state: dict = {
+        "start_time": datetime.now(timezone.utc),
+        "channel": channel,
+        "log_channel": log_channel,
+        "county": county,
+        "last_message": None,
+    }
+
+    handler = make_receive_handler(interface, channel, db_conn=db_conn, log_channel=log_channel, bot_state=bot_state)
+
     if weather_cfg.get("enabled", True):
-        county = str(weather_cfg.get("county", "42"))
         interval = weather_cfg.get("interval_seconds", 3600)
-        t = threading.Thread(
+        threading.Thread(
             target=weather_alert_loop,
             args=(interface, channel, county, interval),
             daemon=True,
-        )
-        t.start()
+        ).start()
+
+    web_cfg = cfg.get("web", {})
+    if web_cfg.get("enabled", False):
+        web_port = int(web_cfg.get("port", 8080))
+        start_web_server(db_conn, bot_state, port=web_port)
 
     if args.dummy:
         run_dummy_loop(handler, channel)

@@ -53,6 +53,63 @@ def get_recent_messages(
         return []
 
 
+def get_messages_page(
+    conn: sqlite3.Connection,
+    channel: int | None,
+    date_from: str | None,
+    date_to: str | None,
+    page: int,
+    page_size: int = 50,
+) -> tuple[list[dict], int]:
+    """Return a page of messages with optional channel/date filters, and the total count."""
+    conditions = []
+    params: list = []
+
+    if channel is not None:
+        conditions.append("channel = ?")
+        params.append(channel)
+    if date_from:
+        conditions.append("received_at >= ?")
+        params.append(date_from)
+    if date_to:
+        conditions.append("received_at <= ?")
+        params.append(date_to + "T23:59:59")
+
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    try:
+        total = conn.execute(f"SELECT COUNT(*) FROM messages {where}", params).fetchone()[0]
+        offset = (page - 1) * page_size
+        cur = conn.execute(
+            f"SELECT channel, sender_id, text, received_at FROM messages {where} "
+            f"ORDER BY received_at DESC LIMIT ? OFFSET ?",
+            params + [page_size, offset],
+        )
+        rows = [
+            {"channel": r[0], "sender_id": r[1], "text": r[2], "received_at": r[3]}
+            for r in cur.fetchall()
+        ]
+        return rows, total
+    except sqlite3.Error as exc:
+        log.error(f"Failed to query messages page: {exc}")
+        return [], 0
+
+
+def get_message_counts(conn: sqlite3.Connection) -> dict:
+    """Return total message count and count for the last 24 hours."""
+    try:
+        total = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+        today = conn.execute(
+            "SELECT COUNT(*) FROM messages WHERE received_at >= datetime('now', '-24 hours')"
+        ).fetchone()[0]
+        channels = conn.execute(
+            "SELECT channel, COUNT(*) FROM messages GROUP BY channel ORDER BY channel"
+        ).fetchall()
+        return {"total": total, "last_24h": today, "by_channel": dict(channels)}
+    except sqlite3.Error as exc:
+        log.error(f"Failed to get message counts: {exc}")
+        return {"total": 0, "last_24h": 0, "by_channel": {}}
+
+
 def purge_old_messages(conn: sqlite3.Connection, days: int = 365) -> int:
     """Delete messages older than *days* days. Returns the number of rows deleted."""
     try:

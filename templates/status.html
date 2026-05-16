@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Status — MeshtasticBot{% endblock %}
+{% block content %}
+
+<h4 class="mb-4">Bot Status</h4>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <div class="display-6">{{ counts.total }}</div>
+        <div class="text-muted small">Total messages logged</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <div class="display-6">{{ counts.last_24h }}</div>
+        <div class="text-muted small">Messages (last 24 h)</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <div class="display-6">{{ uptime }}</div>
+        <div class="text-muted small">Uptime</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <div class="display-6">ch{{ state.channel }}</div>
+        <div class="text-muted small">Active channel</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header">Configuration</div>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item d-flex justify-content-between">
+          <span>Bot channel</span><strong>{{ state.channel }}</strong>
+        </li>
+        <li class="list-group-item d-flex justify-content-between">
+          <span>Log channel</span><strong>{{ state.log_channel if state.log_channel is not none else '—' }}</strong>
+        </li>
+        <li class="list-group-item d-flex justify-content-between">
+          <span>Weather county</span><strong>{{ state.county if state.county else '—' }}</strong>
+        </li>
+        <li class="list-group-item d-flex justify-content-between">
+          <span>Started at</span>
+          <strong>{{ state.start_time.strftime('%Y-%m-%d %H:%M UTC') if state.start_time else '—' }}</strong>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header">Messages per channel</div>
+      <ul class="list-group list-group-flush">
+        {% for ch, cnt in counts.by_channel.items() %}
+        <li class="list-group-item d-flex justify-content-between">
+          <span>Channel {{ ch }}</span><strong>{{ cnt }}</strong>
+        </li>
+        {% else %}
+        <li class="list-group-item text-muted">No messages yet.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  {% if state.last_message %}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">Last message received</div>
+      <div class="card-body">
+        <p class="mb-1">
+          <span class="font-monospace text-muted small">{{ state.last_message.received_at[:19].replace('T', ' ') }} UTC</span>
+          &nbsp;·&nbsp; ch{{ state.last_message.channel }}
+          &nbsp;·&nbsp; <code>{{ state.last_message.sender_id }}</code>
+        </p>
+        <p class="mb-0">{{ state.last_message.text }}</p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

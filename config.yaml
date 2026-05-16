@@ -23,7 +23,11 @@ message_log:
   db_path: data/messages.db
   retain_days: 365    # messages older than this are deleted daily
 
-# Weather alert settings (Norwegian Meteorological Institute MetAlerts API)
+# Web UI — read-only log viewer and status dashboard (http://localhost:8080)
+web:
+  enabled: true
+  port: 8080
+
 weather:
   enabled: true
   # Norwegian county code (fylkesnummer). 42 = Agder.

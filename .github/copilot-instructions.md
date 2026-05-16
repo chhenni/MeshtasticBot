@@ -40,6 +40,7 @@ python main.py
 - **Bot logic lives entirely in `generate_reply(text, sender_id)`** — return a string to reply or `None` to stay silent.
 - Connection type (serial / tcp / ble) is selected in `config.yaml` and resolved in the `connect()` function.
 - The `api.met.no` weather alerts endpoint: `https://api.met.no/weatherapi/metalerts/2.0/all.json?county=<fylkesnummer>`
+- **Web UI** (`web.py`) is a Flask app started as a daemon thread when `web.enabled: true` in `config.yaml`. It provides a read-only log viewer (`/`), status dashboard (`/status`), and JSON API (`/api/messages`). All DB reads go through `db.py` functions — no raw SQL in `web.py`. Templates live in `templates/` and use Bootstrap 5 via CDN.
 
 ## Bot Commands
 

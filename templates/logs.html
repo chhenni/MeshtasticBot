@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Logs — MeshtasticBot{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Message Log</h4>
+  <span class="text-muted small">{{ total }} message{{ 's' if total != 1 }}</span>
+</div>
+
+<form method="get" class="row g-2 mb-4">
+  <div class="col-auto">
+    <select name="channel" class="form-select form-select-sm">
+      <option value="">All channels</option>
+      {% for ch in channels %}
+        <option value="{{ ch }}" {% if channel == ch|string %}selected{% endif %}>Channel {{ ch }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <input type="date" name="from" class="form-control form-control-sm" value="{{ date_from }}" placeholder="From">
+  </div>
+  <div class="col-auto">
+    <input type="date" name="to" class="form-control form-control-sm" value="{{ date_to }}" placeholder="To">
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+    <a href="/" class="btn btn-sm btn-outline-secondary">Reset</a>
+  </div>
+</form>
+
+{% if rows %}
+<div class="table-responsive">
+  <table class="table table-sm table-striped table-hover">
+    <thead class="table-dark">
+      <tr>
+        <th style="width:160px">Time</th>
+        <th style="width:80px">Ch</th>
+        <th style="width:120px">Sender</th>
+        <th>Message</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="text-nowrap text-muted small">{{ r.received_at[:19].replace('T', ' ') }}</td>
+        <td>{{ r.channel }}</td>
+        <td class="font-monospace small">{{ r.sender_id }}</td>
+        <td>{{ r.text }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total_pages > 1 %}
+<nav>
+  <ul class="pagination pagination-sm">
+    <li class="page-item {% if page == 1 %}disabled{% endif %}">
+      <a class="page-link" href="?channel={{ channel }}&from={{ date_from }}&to={{ date_to }}&page={{ page - 1 }}">‹</a>
+    </li>
+    {% for p in range([1, page - 2]|max, [total_pages + 1, page + 3]|min) %}
+    <li class="page-item {% if p == page %}active{% endif %}">
+      <a class="page-link" href="?channel={{ channel }}&from={{ date_from }}&to={{ date_to }}&page={{ p }}">{{ p }}</a>
+    </li>
+    {% endfor %}
+    <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+      <a class="page-link" href="?channel={{ channel }}&from={{ date_from }}&to={{ date_to }}&page={{ page + 1 }}">›</a>
+    </li>
+  </ul>
+</nav>
+{% endif %}
+
+{% else %}
+<p class="text-muted">No messages match the current filter.</p>
+{% endif %}
+
+{% endblock %}
