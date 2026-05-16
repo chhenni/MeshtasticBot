@@ -18,7 +18,7 @@ import meshtastic.tcp_interface
 import meshtastic.ble_interface
 from pubsub import pub
 
-from db import init_db, store_message, get_recent_messages
+from db import init_db, store_message, get_recent_messages, purge_old_messages
 
 from weather import get_lightning_alerts, format_alert_message, \
     get_wind_alerts, format_wind_alert_message, \
@@ -410,7 +410,17 @@ def weather_alert_loop(interface, channel: int, county: str, interval_seconds: i
         check_and_send()
 
 
-def main():
+def db_purge_loop(conn, retain_days: int = 365):
+    """Background thread: purges messages older than *retain_days* once per day."""
+    PURGE_INTERVAL = 86400  # 24 hours
+    log.info(f"DB purge task started (retain={retain_days} days, interval=24h).")
+    purge_old_messages(conn, retain_days)  # Run once on startup
+    while True:
+        time.sleep(PURGE_INTERVAL)
+        purge_old_messages(conn, retain_days)
+
+
+
     parser = argparse.ArgumentParser(description="MeshtasticBot")
     parser.add_argument("--dummy", action="store_true",
                         help="Run in dummy mode (no device required — interactive CLI)")
@@ -435,7 +445,13 @@ def main():
     if msg_log_cfg.get("enabled", False):
         log_channel = int(msg_log_cfg.get("channel", 1))
         db_path = msg_log_cfg.get("db_path", "messages.db")
+        retain_days = int(msg_log_cfg.get("retain_days", 365))
         db_conn = init_db(db_path)
+        threading.Thread(
+            target=db_purge_loop,
+            args=(db_conn, retain_days),
+            daemon=True,
+        ).start()
 
     handler = make_receive_handler(interface, channel, db_conn=db_conn, log_channel=log_channel)
 

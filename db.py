@@ -50,6 +50,21 @@ def get_recent_messages(
         return []
 
 
+def purge_old_messages(conn: sqlite3.Connection, days: int = 365) -> int:
+    """Delete messages older than *days* days. Returns the number of rows deleted."""
+    try:
+        cur = conn.execute(
+            "DELETE FROM messages WHERE received_at < datetime('now', ? || ' days')",
+            (f"-{days}",),
+        )
+        conn.commit()
+        if cur.rowcount:
+            log.info(f"Purged {cur.rowcount} message(s) older than {days} days.")
+        return cur.rowcount
+    except sqlite3.Error as exc:
+        log.error(f"Failed to purge old messages: {exc}")
+        return 0
+
 def store_message(
     conn: sqlite3.Connection,
     packet_id: str,

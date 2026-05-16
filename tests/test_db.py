@@ -4,7 +4,7 @@ Tests for db.py — store_message, get_recent_messages (in-memory SQLite).
 
 import pytest
 from datetime import datetime, timezone, timedelta
-from db import init_db, store_message, get_recent_messages
+from db import init_db, store_message, get_recent_messages, purge_old_messages
 
 
 @pytest.fixture
@@ -62,3 +62,32 @@ class TestStoreAndRetrieve:
 
     def test_empty_channel_returns_empty_list(self, conn):
         assert get_recent_messages(conn, 99, 24) == []
+
+
+class TestPurgeOldMessages:
+    def test_purge_removes_old_rows(self, conn):
+        old = (datetime.now(tz=timezone.utc) - timedelta(days=400)).isoformat()
+        store_message(conn, "old", 1, "!abc", "Old", old)
+        deleted = purge_old_messages(conn, days=365)
+        assert deleted == 1
+        assert get_recent_messages(conn, 1, 24 * 400) == []
+
+    def test_purge_keeps_recent_rows(self, conn):
+        recent = datetime.now(tz=timezone.utc).isoformat()
+        store_message(conn, "recent", 1, "!abc", "Recent", recent)
+        deleted = purge_old_messages(conn, days=365)
+        assert deleted == 0
+        assert len(get_recent_messages(conn, 1, 24)) == 1
+
+    def test_purge_only_removes_old(self, conn):
+        old = (datetime.now(tz=timezone.utc) - timedelta(days=400)).isoformat()
+        recent = datetime.now(tz=timezone.utc).isoformat()
+        store_message(conn, "old", 1, "!abc", "Old", old)
+        store_message(conn, "new", 1, "!abc", "Recent", recent)
+        deleted = purge_old_messages(conn, days=365)
+        assert deleted == 1
+        rows = get_recent_messages(conn, 1, 24)
+        assert rows[0]["text"] == "Recent"
+
+    def test_purge_returns_zero_on_empty_db(self, conn):
+        assert purge_old_messages(conn, days=365) == 0
