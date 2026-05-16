@@ -325,8 +325,9 @@ def make_receive_handler(interface, channel: int, db_conn=None, log_channel: int
                 log.info(f"[ch{_ch} to {_to}]: {msg}")
                 interface.sendText(msg, channelIndex=_ch)
         else:
-            return
+            reply_fn = None
 
+        # Store to log DB for any broadcast on the log channel, regardless of bot channel
         if db_conn is not None and not is_dm and pkt_channel == log_channel:
             raw_id = packet.get("id")
             packet_id = str(raw_id) if raw_id else str(uuid4())
@@ -339,6 +340,9 @@ def make_receive_handler(interface, channel: int, db_conn=None, log_channel: int
                     "text": text,
                     "received_at": received_at,
                 }
+
+        if reply_fn is None:
+            return
 
         if text.lower().startswith("/help"):
             handle_help_command(reply_fn)
@@ -488,7 +492,7 @@ def main():
         start_web_server(db_conn, bot_state, port=web_port)
 
     if args.dummy:
-        run_dummy_loop(handler, channel)
+        run_dummy_loop(handler, channel, log_channel=log_channel)
         interface.close()
     else:
         pub.subscribe(handler, "meshtastic.receive.text")
