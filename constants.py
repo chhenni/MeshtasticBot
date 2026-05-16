@@ -5,3 +5,6 @@ MAX_BYTES = 200
 PACK_BYTES = MAX_BYTES - 10
 
 USER_AGENT = "MeshtasticBot/1.0 github.com/chhenni/MeshtasticBot"
+
+# Maximum lookback for /krslog (7 days).
+MAX_KRSLOG_HOURS = 168

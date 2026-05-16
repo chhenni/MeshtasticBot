@@ -33,7 +33,7 @@ from dummy import DummyInterface, run_dummy_loop
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-from constants import MAX_BYTES, PACK_BYTES
+from constants import MAX_BYTES, PACK_BYTES, MAX_KRSLOG_HOURS
 log = logging.getLogger(__name__)
 
 CONFIG_FILE = "config.yaml"
@@ -79,7 +79,7 @@ HELP_MESSAGES = [
     "/bandplan_check <freq> - Sjekk frekvens\n"
     "/calling <bånd> - Anropsfrekvenser\n"
     "/mvhf [kanal] - Marin VHF kanaler\n"
-    "/krslog [t] - Meldingslogg (std: 24t)",
+    "/krslog [t] - Meldingslogg (std: 24t, maks: 168t)",
 
     "Info [3/3]:\n"
     "- Kommandoer funker via DM\n"
@@ -251,8 +251,11 @@ def handle_krslog_command(text: str, reply_fn, db_conn, log_channel: int) -> Non
             if hours < 1:
                 raise ValueError
         except ValueError:
-            reply_fn("Bruk: /krslog [antall timer]\nEks: /krslog 48")
+            reply_fn(f"Bruk: /krslog [antall timer]\nEks: /krslog 48 (maks {MAX_KRSLOG_HOURS}t)")
             return
+        if hours > MAX_KRSLOG_HOURS:
+            hours = MAX_KRSLOG_HOURS
+            reply_fn(f"Maks {MAX_KRSLOG_HOURS}t – viser siste {MAX_KRSLOG_HOURS}t.")
 
     if db_conn is None:
         reply_fn("Meldingslogg er ikke aktivert.")

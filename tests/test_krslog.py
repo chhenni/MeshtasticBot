@@ -7,7 +7,7 @@ import pytest
 from datetime import datetime, timezone, timedelta
 from db import init_db, store_message
 from main import handle_krslog_command
-from constants import MAX_BYTES
+from constants import MAX_BYTES, MAX_KRSLOG_HOURS
 
 
 @pytest.fixture
@@ -81,3 +81,13 @@ class TestKrslogCommand:
     def test_zero_hours_returns_error(self, conn):
         replies = collect_replies(conn, "/krslog 0")
         assert "Bruk:" in replies[0]
+
+    def test_over_limit_is_clamped(self, conn):
+        store_n(conn, 3)
+        over = MAX_KRSLOG_HOURS + 100
+        replies = collect_replies(conn, f"/krslog {over}")
+        # First reply should be the clamping notice
+        assert str(MAX_KRSLOG_HOURS) in replies[0]
+        # Messages still returned (second reply onward)
+        combined = "\n".join(replies[1:])
+        assert "Message 0" in combined
