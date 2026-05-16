@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./config.yaml:/app/config.yaml:ro
+      - bot_data:/app/data
     # Serial connection: uncomment and adjust device path
     devices:
       - /dev/ttyUSB1:/dev/ttyUSB1
@@ -14,3 +15,7 @@ services:
     #volumes:
     #  - ./config.yaml:/app/config.yaml:ro
     #  - /run/dbus:/run/dbus:ro
+    #  - bot_data:/app/data
+
+volumes:
+  bot_data:
