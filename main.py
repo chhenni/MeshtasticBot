@@ -421,6 +421,7 @@ def db_purge_loop(conn, retain_days: int = 365):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="MeshtasticBot")
     parser.add_argument("--dummy", action="store_true",
                         help="Run in dummy mode (no device required — interactive CLI)")
     parser.add_argument("--channel", type=int, default=None,
