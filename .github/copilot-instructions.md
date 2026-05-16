@@ -56,6 +56,16 @@ python main.py
 
 **Rule: whenever a new command is added, always add it to both this table and the `HELP_MESSAGES` list in `main.py`.**
 
+## Coding Rules
+
+- **Always use `len(s.encode("utf-8"))` to measure message size, never `len(s)`.**
+  Meshtastic's byte limit is a hard constraint, and messages routinely contain
+  multi-byte characters (Norwegian: ø, æ, å — and emojis: ⚡, 💨, 📻, 🟢).
+  `len(s)` counts Unicode code points, not bytes, and will undercount silently.
+- When building paginated messages, pack against `PACK_BYTES` (= `MAX_BYTES - 10`),
+  not `MAX_BYTES`, to leave room for the `[N/total]` prefix that is added afterwards.
+  Both constants are defined in `constants.py`.
+
 ## Docker
 
 - `Dockerfile` uses `COPY *.py ./` — all Python source files are included automatically. No manual updates needed when adding new `.py` files.
