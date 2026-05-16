@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 import requests
 
-from constants import MAX_BYTES, USER_AGENT
+from constants import MAX_BYTES, PACK_BYTES, USER_AGENT
 
 log = logging.getLogger(__name__)
 
@@ -242,7 +242,7 @@ def format_forecast_24h_messages(forecast: list[dict], lat: float, lon: float) -
     for line in lines:
         candidate = (header + "\n" + "\n".join(current_lines + [line])
                      if include_header else "\n".join(current_lines + [line]))
-        if current_lines and len(candidate.encode("utf-8")) > MAX_BYTES:
+        if current_lines and len(candidate.encode("utf-8")) > PACK_BYTES:
             pages.append(header + "\n" + "\n".join(current_lines)
                          if include_header else "\n".join(current_lines))
             current_lines = [line]
@@ -371,8 +371,9 @@ def format_alert_message(alert: dict) -> str:
             pass
 
     msg = f"⚡ LYN-VARSEL [{severity}]: {area}. {description}{valid_until}"
-    if len(msg) > 200:
-        msg = msg[:197] + "..."
+    encoded = msg.encode("utf-8")
+    if len(encoded) > MAX_BYTES:
+        msg = encoded[:MAX_BYTES - 3].decode("utf-8", errors="ignore") + "..."
     return msg
 
 
@@ -429,6 +430,7 @@ def format_wind_alert_message(alert: dict) -> str:
             pass
 
     msg = f"💨 VINDVARSEL [{severity}]: {area}. {description}{valid_until}"
-    if len(msg) > 200:
-        msg = msg[:197] + "..."
+    encoded = msg.encode("utf-8")
+    if len(encoded) > MAX_BYTES:
+        msg = encoded[:MAX_BYTES - 3].decode("utf-8", errors="ignore") + "..."
     return msg

@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 
 import requests
 
-from constants import MAX_BYTES, USER_AGENT
+from constants import MAX_BYTES, PACK_BYTES, USER_AGENT
 
 log = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ def format_radio_messages(data: dict) -> list[str]:
     current_lines: list[str] = []
     for line in lines:
         candidate = "\n".join(current_lines + [line])
-        if current_lines and len(candidate.encode("utf-8")) > MAX_BYTES:
+        if current_lines and len(candidate.encode("utf-8")) > PACK_BYTES:
             pages.append("\n".join(current_lines))
             current_lines = [line]
         else:

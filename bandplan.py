@@ -8,7 +8,7 @@ Each segment has:
 
 import re
 
-from constants import MAX_BYTES
+from constants import MAX_BYTES, PACK_BYTES
 
 # Each band entry:
 #   "range": human-readable frequency range string
@@ -319,7 +319,7 @@ def format_bandplan_messages(band: str) -> list[str]:
     for line in lines:
         candidate = (header + "\n" + "\n".join(current_lines + [line])
                      if include_header else "\n".join(current_lines + [line]))
-        if current_lines and len(candidate.encode("utf-8")) > MAX_BYTES:
+        if current_lines and len(candidate.encode("utf-8")) > PACK_BYTES:
             pages.append(header + "\n" + "\n".join(current_lines)
                          if include_header else "\n".join(current_lines))
             current_lines = [line]
@@ -352,7 +352,7 @@ def format_calling_messages(band: str) -> list[str]:
     for line in lines:
         candidate = (header + "\n" + "\n".join(current_lines + [line])
                      if include_header else "\n".join(current_lines + [line]))
-        if current_lines and len(candidate.encode("utf-8")) > MAX_BYTES:
+        if current_lines and len(candidate.encode("utf-8")) > PACK_BYTES:
             pages.append(header + "\n" + "\n".join(current_lines)
                          if include_header else "\n".join(current_lines))
             current_lines = [line]

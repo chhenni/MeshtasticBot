@@ -33,7 +33,7 @@ from dummy import DummyInterface, run_dummy_loop
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-from constants import MAX_BYTES
+from constants import MAX_BYTES, PACK_BYTES
 log = logging.getLogger(__name__)
 
 CONFIG_FILE = "config.yaml"
@@ -276,7 +276,7 @@ def handle_krslog_command(text: str, reply_fn, db_conn, log_channel: int) -> Non
         line = f"{ts} {r['sender_id']}: {r['text']}"
         candidate = (header + "\n" + "\n".join(current_lines + [line])
                      if include_header else "\n".join(current_lines + [line]))
-        if current_lines and len(candidate.encode("utf-8")) > MAX_BYTES:
+        if current_lines and len(candidate.encode("utf-8")) > PACK_BYTES:
             pages.append(header + "\n" + "\n".join(current_lines)
                          if include_header else "\n".join(current_lines))
             current_lines = [line]
