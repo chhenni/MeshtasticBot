@@ -32,11 +32,15 @@ from db import get_last_messages, get_recent_messages
 from marine import format_mvhf_channel, format_mvhf_list_messages
 from radio import format_radio_messages, get_radio_forecast
 from weather import (
+    format_alert_message,
     format_forecast_24h_messages,
     format_forecast_messages,
+    format_wind_alert_message,
     get_forecast,
     get_forecast_24h,
+    get_lightning_alerts,
     get_node_position,
+    get_wind_alerts,
 )
 
 log = logging.getLogger(__name__)
@@ -52,6 +56,7 @@ HELP_MESSAGES = [
 
     "Kommandoer [2/3]:\n"
     "/radio - HF/VHF båndkondisjon\n"
+    "/alert - Sjekk aktive værvarsler nå\n"
     "/bandplan <bånd> - Vis båndplan\n"
     "/bandplan_check <freq> - Sjekk frekvens\n"
     "/calling <bånd> - Anropsfrekvenser\n"
@@ -155,6 +160,32 @@ def handle_nodes_command(text: str, reply_fn, ctx: dict) -> None:
     if current:
         pages.append((header + "\n" + "\n".join(current)) if use_header else "\n".join(current))
 
+    _send_pages(reply_fn, pages)
+
+
+def handle_alert_command(text: str, reply_fn, ctx: dict) -> None:
+    """Fetch active lightning and wind alerts on demand and send them as replies."""
+    county = ctx.get("county")
+    if not county:
+        reply_fn("Varseltjenesten er ikke konfigurert (mangler county i config).")
+        return
+
+    lightning = get_lightning_alerts(county)
+    wind = get_wind_alerts(county)
+    all_alerts = [(a, "lightning") for a in lightning] + [(a, "wind") for a in wind]
+
+    if not all_alerts:
+        reply_fn("✅ Ingen aktive varsler for ditt område.")
+        return
+
+    reply_fn(f"⚠️ Aktive varsler ({len(all_alerts)}):")
+    time.sleep(2)
+    pages = []
+    for alert, kind in all_alerts:
+        if kind == "lightning":
+            pages.append(format_alert_message(alert))
+        else:
+            pages.append(format_wind_alert_message(alert))
     _send_pages(reply_fn, pages)
 
 
@@ -331,6 +362,7 @@ COMMANDS: dict[str, callable] = {
     "/24hour":         handle_24h_command,
     "/24h":            handle_24h_command,
     "/radio":          handle_radio_command,
+    "/alert":          handle_alert_command,
     "/mvhf":           handle_mvhf_command,
     "/krslast":        handle_krslast_command,
     "/krslog":         handle_krslog_command,

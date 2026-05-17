@@ -10,7 +10,7 @@
 ## Medium effort
 
 - **`/tide <location>`** — Norwegian tide tables from `api.sehavniva.no` (free Norwegian government API, same pattern as yr.no)
-- **`/alert`** — on-demand weather alert check, not just the background loop
+- ✅ **`/alert`** — on-demand weather alert check, not just the background loop
 - **`/krssearch <term>`** — search the log DB by keyword
 - **GitHub Actions CI** — run the test suite automatically on push (the multi-stage Dockerfile already does this locally, but a proper CI pipeline adds confidence on PRs)
 

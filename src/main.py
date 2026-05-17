@@ -153,6 +153,7 @@ def make_receive_handler(
             "db_conn": db_conn,
             "log_channel": log_channel,
             "start_time": bot_state["start_time"] if bot_state else None,
+            "county": bot_state["county"] if bot_state else None,
         }
         handler(text, reply_fn, ctx)
 
