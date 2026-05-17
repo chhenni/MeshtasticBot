@@ -214,6 +214,41 @@ def db_purge_loop(conn, retain_days: int = 365):
         purge_old_messages(conn, retain_days)
 
 
+def sync_nodes_from_interface(interface, db_conn) -> int:
+    """Upsert all nodes currently known to the interface into the nodes DB table.
+
+    Returns the number of nodes synced.
+    """
+    nodes = interface.nodes or {}
+    now = datetime.now(timezone.utc).isoformat()
+    for node_id, info in nodes.items():
+        user = info.get("user", {})
+        pos = info.get("position", {})
+        upsert_node(
+            db_conn,
+            node_id=node_id,
+            long_name=user.get("longName"),
+            short_name=user.get("shortName"),
+            snr=info.get("snr"),
+            lat=pos.get("latitude"),
+            lon=pos.get("longitude"),
+            last_seen=now,
+        )
+    return len(nodes)
+
+
+def node_sync_loop(interface, db_conn, interval_seconds: int = 300):
+    """Background thread: periodically syncs interface.nodes → DB."""
+    log.info(f"Node sync task started (interval={interval_seconds}s).")
+    while True:
+        time.sleep(interval_seconds)
+        try:
+            n = sync_nodes_from_interface(interface, db_conn)
+            log.debug(f"Node sync: {n} nodes upserted.")
+        except Exception as exc:
+            log.warning(f"Node sync failed: {exc}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="MeshtasticBot")
     parser.add_argument("--dummy", action="store_true",
@@ -249,6 +284,14 @@ def main():
         threading.Thread(
             target=db_purge_loop,
             args=(db_conn, retain_days),
+            daemon=True,
+        ).start()
+        # Populate the node registry from what the interface already knows.
+        n = sync_nodes_from_interface(interface, db_conn)
+        log.info(f"Initial node sync: {n} nodes loaded into registry.")
+        threading.Thread(
+            target=node_sync_loop,
+            args=(interface, db_conn),
             daemon=True,
         ).start()
 
