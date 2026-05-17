@@ -40,6 +40,25 @@ def load_config(path: str) -> dict:
         return yaml.safe_load(f)
 
 
+def validate_config(cfg: dict) -> None:
+    """Raise ValueError with a clear message if required config fields are missing or invalid."""
+    errors = []
+
+    conn = cfg.get("connection", {})
+    kind = conn.get("type", "serial")
+    if kind not in ("serial", "tcp", "ble"):
+        errors.append(f"connection.type must be 'serial', 'tcp', or 'ble' — got '{kind}'")
+    if kind == "tcp" and not conn.get("host"):
+        errors.append("connection.host is required when connection.type is 'tcp'")
+
+    weather_cfg = cfg.get("weather", {})
+    if weather_cfg.get("enabled", True) and not weather_cfg.get("county"):
+        errors.append("weather.county is required when weather.enabled is true")
+
+    if errors:
+        raise ValueError("Invalid config.yaml:\n" + "\n".join(f"  - {e}" for e in errors))
+
+
 def connect(cfg: dict):
     """Create and return a Meshtastic interface based on config."""
     conn = cfg.get("connection", {})
@@ -190,6 +209,11 @@ def main():
     args = parser.parse_args()
 
     cfg = load_config(CONFIG_FILE)
+    try:
+        validate_config(cfg)
+    except ValueError as exc:
+        log.error(str(exc))
+        raise SystemExit(1)
     channel = cfg.get("channel", 2)
     if args.channel is not None:
         channel = args.channel
