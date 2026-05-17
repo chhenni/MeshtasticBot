@@ -83,13 +83,14 @@ def make_receive_handler(interface, channel: int, db_conn=None, log_channel: int
         else:
             reply_fn = None
 
-        # Store to log DB for any broadcast on the log channel, regardless of bot channel
-        if db_conn is not None and not is_dm and pkt_channel == log_channel:
+        # Store every received message. DMs are stored with channel = -1.
+        if db_conn is not None:
             raw_id = packet.get("id")
             packet_id = str(raw_id) if raw_id else str(uuid4())
             received_at = datetime.now(timezone.utc).isoformat()
-            store_message(db_conn, packet_id, pkt_channel, sender, text, received_at)
-            if bot_state is not None:
+            store_channel = -1 if is_dm else pkt_channel
+            store_message(db_conn, packet_id, store_channel, sender, text, received_at)
+            if bot_state is not None and pkt_channel == log_channel:
                 bot_state["last_message"] = {
                     "channel": pkt_channel,
                     "sender_id": sender,
