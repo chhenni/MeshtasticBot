@@ -6,5 +6,6 @@ Awarded by the user for exceptional work.
 |---|---|---|
 | 2026-05-17 | ⭐ | Refactoring, tests, bug fixes, and a full pytest suite |
 | 2026-05-17 | ⭐ | Web UI for log viewing and bot status dashboard |
+| 2026-05-17 | ⭐ | /krslast command, multi-channel dummy mode, DB persistence |
 
-**Total: ⭐⭐**
+**Total: ⭐⭐⭐**
