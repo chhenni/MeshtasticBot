@@ -117,6 +117,7 @@ def make_receive_handler(
             "sender": sender,
             "db_conn": db_conn,
             "log_channel": log_channel,
+            "start_time": bot_state["start_time"] if bot_state else None,
         }
         cmd = text.split()[0].lower()
         handler = COMMANDS.get(cmd)

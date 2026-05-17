@@ -16,6 +16,7 @@ on_receive in main.py looks up text.split()[0] and calls the handler.
 
 import logging
 import time
+from datetime import datetime, timezone
 
 from bandplan import (
     BANDPLAN,
@@ -44,6 +45,7 @@ log = logging.getLogger(__name__)
 HELP_MESSAGES = [
     "Kommandoer [1/3]:\n"
     "/help - Vis hjelp\n"
+    "/ping - Status og oppetid\n"
     "/weather - 7-dagers varsel (GPS)\n"
     "/24hour|/24h - 24t timevarsel (GPS)",
 
@@ -105,6 +107,21 @@ def _build_log_pages(rows: list[dict], header: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # Command handlers  —  signature: (text, reply_fn, ctx)
 # ---------------------------------------------------------------------------
+
+def handle_ping_command(text: str, reply_fn, ctx: dict) -> None:
+    """Reply with uptime and number of nodes currently seen on the mesh."""
+    start_time = ctx.get("start_time")
+    if start_time:
+        delta = datetime.now(timezone.utc) - start_time
+        hours, remainder = divmod(int(delta.total_seconds()), 3600)
+        minutes = remainder // 60
+        uptime = f"{hours}t {minutes}m" if hours else f"{minutes}m"
+    else:
+        uptime = "ukjent"
+
+    nodes = ctx["interface"].nodes or {}
+    reply_fn(f"🟢 Pong! Oppe: {uptime} | Noder sett: {len(nodes)}")
+
 
 def handle_help_command(text: str, reply_fn, ctx: dict) -> None:
     for i, msg in enumerate(HELP_MESSAGES):
@@ -272,6 +289,7 @@ def handle_krslast_command(text: str, reply_fn, ctx: dict) -> None:
 # ---------------------------------------------------------------------------
 
 COMMANDS: dict[str, callable] = {
+    "/ping":           handle_ping_command,
     "/help":           handle_help_command,
     "/weather":        handle_weather_command,
     "/24hour":         handle_24h_command,
