@@ -10,8 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY *.py ./
+COPY src/ src/
 COPY tests/ tests/
+COPY conftest.py .
 
 RUN python -m pytest tests/ -q --tb=short
 
@@ -27,10 +28,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY --from=builder /app/*.py ./
-COPY templates/ templates/
+COPY --from=builder /app/src/ src/
 
 # Mount config.yaml at runtime via -v ./config.yaml:/app/config.yaml
 # Serial: pass device with --device /dev/ttyUSB0
 # TCP:    no extra flags needed
-CMD ["python", "main.py"]
+CMD ["python", "src/main.py"]
