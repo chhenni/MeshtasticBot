@@ -35,3 +35,6 @@ weather:
   county: 42
   # How often to check for new alerts (in seconds). Default: 3600 (1 hour)
   interval_seconds: 3600
+
+# Rate limiting — ignore repeated commands from the same sender within this window
+rate_limit_seconds: 10

@@ -69,7 +69,10 @@ def make_receive_handler(
     db_conn=None,
     log_channel: int | None = None,
     bot_state: dict | None = None,
+    rate_limit_seconds: int = 10,
 ):
+    _last_command: dict[str, float] = {}  # sender → timestamp of last command
+
     def on_receive(packet, interface=interface):
         decoded = packet.get("decoded", {})
         text = decoded.get("text", "").strip()
@@ -112,6 +115,19 @@ def make_receive_handler(
         if reply_fn is None:
             return
 
+        cmd = text.split()[0].lower()
+        handler = COMMANDS.get(cmd)
+        if not handler:
+            return
+
+        now = time.time()
+        last = _last_command.get(sender, 0)
+        if now - last < rate_limit_seconds:
+            remaining = int(rate_limit_seconds - (now - last))
+            log.info(f"Rate limit: ignoring {cmd} from {sender} ({remaining}s remaining)")
+            return
+        _last_command[sender] = now
+
         ctx = {
             "interface": interface,
             "sender": sender,
@@ -119,10 +135,7 @@ def make_receive_handler(
             "log_channel": log_channel,
             "start_time": bot_state["start_time"] if bot_state else None,
         }
-        cmd = text.split()[0].lower()
-        handler = COMMANDS.get(cmd)
-        if handler:
-            handler(text, reply_fn, ctx)
+        handler(text, reply_fn, ctx)
 
     return on_receive
 
@@ -212,7 +225,14 @@ def main():
         "last_message": None,
     }
 
-    handler = make_receive_handler(interface, channel, db_conn=db_conn, log_channel=log_channel, bot_state=bot_state)
+    rate_limit_seconds = int(cfg.get("rate_limit_seconds", 10))
+    handler = make_receive_handler(
+        interface, channel,
+        db_conn=db_conn,
+        log_channel=log_channel,
+        bot_state=bot_state,
+        rate_limit_seconds=rate_limit_seconds,
+    )
 
     if weather_cfg.get("enabled", True):
         interval = weather_cfg.get("interval_seconds", 3600)
