@@ -64,9 +64,6 @@ python main.py
 - **After making code changes, always run `ruff check src/ tests/` and fix any issues before committing.**
 - **Before every commit, run `git status` to confirm nothing is accidentally left unstaged.**
   Use `git add -u` or `git add .` rather than listing files by name to avoid missing files modified by tools (e.g. `ruff --fix`).
-
-
-
 - **Always use `len(s.encode("utf-8"))` to measure message size, never `len(s)`.**
   Meshtastic's byte limit is a hard constraint, and messages routinely contain
   multi-byte characters (Norwegian: ø, æ, å — and emojis: ⚡, 💨, 📻, 🟢).
