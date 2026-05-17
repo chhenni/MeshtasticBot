@@ -16,7 +16,7 @@
 
 ## Bigger ideas
 
-- **Persistent node registry** — store seen nodes in the DB, track last-seen time, build a `/whois !abc123` command
+- ✅ **Persistent node registry** — store seen nodes in the DB, track last-seen time, build a `/whois !abc123` command
 - **Repeater/relay mode** — forward messages between channels or to a webhook (Slack, Discord, Telegram)
 - **APRS bridge** — Meshtastic positions → APRS-IS, so nodes show up on aprs.fi
 - **Web UI enhancements** — live updates via SSE/WebSocket, map view of node positions using Leaflet.js

@@ -28,7 +28,7 @@ from bandplan import (
     resolve_band,
 )
 from constants import MAX_KRSLAST, MAX_KRSLOG_HOURS, PACK_BYTES
-from db import get_last_messages, get_recent_messages
+from db import get_last_messages, get_node, get_recent_messages, lookup_nodes_by_name
 from marine import format_mvhf_channel, format_mvhf_list_messages
 from radio import format_radio_messages, get_radio_forecast
 from weather import (
@@ -57,6 +57,7 @@ HELP_MESSAGES = [
     "Kommandoer [2/3]:\n"
     "/radio - HF/VHF båndkondisjon\n"
     "/alert - Sjekk aktive værvarsler nå\n"
+    "/whois <id/navn> - Slå opp en node\n"
     "/bandplan <bånd> - Vis båndplan\n"
     "/bandplan_check <freq> - Sjekk frekvens\n"
     "/calling <bånd> - Anropsfrekvenser\n"
@@ -293,6 +294,44 @@ def handle_mvhf_command(text: str, reply_fn, ctx: dict) -> None:
     _send_pages(reply_fn, format_mvhf_list_messages(groups=["Nød/DSC", "Havn/trafikk"]))
 
 
+def handle_whois_command(text: str, reply_fn, ctx: dict) -> None:
+    """Look up a node by ID or name. /whois !id  or  /whois <name>"""
+    db_conn = ctx["db_conn"]
+    parts = text.strip().split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        reply_fn("Bruk: /whois <node-ID eller navn>\nEks: /whois !aabbccdd  eller  /whois Alpha")
+        return
+    if db_conn is None:
+        reply_fn("Node-registeret er ikke aktivert.")
+        return
+
+    query = parts[1].strip()
+
+    if query.startswith("!"):
+        node = get_node(db_conn, query)
+        nodes = [node] if node else []
+    else:
+        nodes = lookup_nodes_by_name(db_conn, query)
+
+    if not nodes:
+        reply_fn(f"Ingen noder funnet for '{query}'.")
+        return
+
+    pages = []
+    for n in nodes:
+        name = n.get("long_name") or n.get("short_name") or n["node_id"]
+        short = f" ({n['short_name']})" if n.get("short_name") else ""
+        snr = f" SNR:{n['last_snr']:.1f}" if n.get("last_snr") is not None else ""
+        rssi = f" RSSI:{n['last_rssi']}" if n.get("last_rssi") is not None else ""
+        ts = n["last_seen"][:16].replace("T", " ") if n.get("last_seen") else "?"
+        pos = ""
+        if n.get("lat") is not None and n.get("lon") is not None:
+            pos = f"\nPos: {n['lat']:.4f},{n['lon']:.4f}"
+        pages.append(f"{n['node_id']}\n{name}{short}{snr}{rssi}\nSist sett: {ts}{pos}")
+
+    _send_pages(reply_fn, pages)
+
+
 def handle_krslog_command(text: str, reply_fn, ctx: dict) -> None:
     """Return recent messages from the log channel. Optional arg overrides the hour window."""
     db_conn, log_channel = ctx["db_conn"], ctx["log_channel"]
@@ -364,6 +403,7 @@ COMMANDS: dict[str, callable] = {
     "/radio":          handle_radio_command,
     "/alert":          handle_alert_command,
     "/mvhf":           handle_mvhf_command,
+    "/whois":          handle_whois_command,
     "/krslast":        handle_krslast_command,
     "/krslog":         handle_krslog_command,
     "/bandplan_check": handle_bandplan_check_command,

@@ -19,7 +19,7 @@ import yaml
 from pubsub import pub
 
 from commands import COMMANDS
-from db import init_db, purge_old_messages, store_message
+from db import init_db, purge_old_messages, store_message, upsert_node
 from dummy import DummyInterface, run_dummy_loop
 from weather import (
     format_alert_message,
@@ -130,6 +130,19 @@ def make_receive_handler(
                     "text": text,
                     "received_at": received_at,
                 }
+
+            node_info = (interface.nodes or {}).get(sender, {})
+            upsert_node(
+                db_conn,
+                node_id=sender,
+                long_name=node_info.get("user", {}).get("longName"),
+                short_name=node_info.get("user", {}).get("shortName"),
+                last_seen=received_at,
+                snr=packet.get("rxSnr"),
+                rssi=packet.get("rxRssi"),
+                lat=node_info.get("position", {}).get("latitude"),
+                lon=node_info.get("position", {}).get("longitude"),
+            )
 
         if reply_fn is None:
             return

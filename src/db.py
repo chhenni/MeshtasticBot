@@ -22,6 +22,19 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 """
 
+CREATE_NODES_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS nodes (
+    node_id     TEXT    PRIMARY KEY,
+    long_name   TEXT,
+    short_name  TEXT,
+    last_seen   TEXT    NOT NULL,
+    last_snr    REAL,
+    last_rssi   INTEGER,
+    lat         REAL,
+    lon         REAL
+);
+"""
+
 
 def init_db(path: str) -> sqlite3.Connection:
     """Open (or create) the SQLite database at *path* and return the connection."""
@@ -29,6 +42,7 @@ def init_db(path: str) -> sqlite3.Connection:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.execute(CREATE_TABLE_SQL)
+    conn.execute(CREATE_NODES_TABLE_SQL)
     conn.commit()
     log.info(f"Message log database opened: {path}")
     return conn
@@ -163,3 +177,69 @@ def store_message(
         conn.commit()
     except sqlite3.Error as exc:
         log.error(f"Failed to store message (packet_id={packet_id}): {exc}")
+
+
+def upsert_node(
+    conn: sqlite3.Connection,
+    node_id: str,
+    long_name: str | None = None,
+    short_name: str | None = None,
+    last_seen: str | None = None,
+    snr: float | None = None,
+    rssi: int | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+) -> None:
+    """Insert or update a node record, only overwriting non-None fields."""
+    try:
+        conn.execute(
+            "INSERT INTO nodes (node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(node_id) DO UPDATE SET "
+            "  long_name  = COALESCE(excluded.long_name,  long_name), "
+            "  short_name = COALESCE(excluded.short_name, short_name), "
+            "  last_seen  = COALESCE(excluded.last_seen,  last_seen), "
+            "  last_snr   = COALESCE(excluded.last_snr,   last_snr), "
+            "  last_rssi  = COALESCE(excluded.last_rssi,  last_rssi), "
+            "  lat        = COALESCE(excluded.lat,        lat), "
+            "  lon        = COALESCE(excluded.lon,        lon)",
+            (node_id, long_name, short_name, last_seen, snr, rssi, lat, lon),
+        )
+        conn.commit()
+    except sqlite3.Error as exc:
+        log.error(f"Failed to upsert node (node_id={node_id}): {exc}")
+
+
+def get_node(conn: sqlite3.Connection, node_id: str) -> dict | None:
+    """Return a node record by exact node_id, or None if not found."""
+    try:
+        cur = conn.execute(
+            "SELECT node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon "
+            "FROM nodes WHERE node_id = ?",
+            (node_id,),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+        keys = ("node_id", "long_name", "short_name", "last_seen", "last_snr", "last_rssi", "lat", "lon")
+        return dict(zip(keys, row))
+    except sqlite3.Error as exc:
+        log.error(f"Failed to get node (node_id={node_id}): {exc}")
+        return None
+
+
+def lookup_nodes_by_name(conn: sqlite3.Connection, query: str) -> list[dict]:
+    """Return nodes whose long_name or short_name contains *query* (case-insensitive)."""
+    try:
+        pattern = f"%{query}%"
+        cur = conn.execute(
+            "SELECT node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon "
+            "FROM nodes WHERE long_name LIKE ? OR short_name LIKE ? "
+            "ORDER BY last_seen DESC",
+            (pattern, pattern),
+        )
+        keys = ("node_id", "long_name", "short_name", "last_seen", "last_snr", "last_rssi", "lat", "lon")
+        return [dict(zip(keys, row)) for row in cur.fetchall()]
+    except sqlite3.Error as exc:
+        log.error(f"Failed to lookup nodes by name (query={query!r}): {exc}")
+        return []
