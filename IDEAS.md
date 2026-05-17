@@ -14,6 +14,7 @@
 - ✅ **`/alert`** — on-demand weather alert check, not just the background loop
 - **`/krssearch <term>`** — search the log DB by keyword
 - **Per-command rate limiting** — currently rate limiting is per-sender globally; extend to key on `(sender, command)` so e.g. `/weather` can have its own cooldown independent of `/ping`
+- **Burst-tolerant rate limiting** — current single-cooldown model blocks all commands after one is sent; switch to a token bucket or sliding window so a user can send a few commands in quick succession but is throttled if they spam continuously
 - **Web UI authentication** — simple IP whitelist or API key to protect the message log from open network access
 - **Config validation improvements** — add checks for `retain_days > 0`, port range 1–65535, county as 2-digit string, `rate_limit_seconds >= 0`
 - **`/health` endpoint** — `GET /health` returns JSON with uptime, last message timestamp, DB size — useful for external monitoring
