@@ -31,3 +31,4 @@ Thumbs.db
 
 # Meshtastic device key (never commit private keys)
 *.key
+messages.db
