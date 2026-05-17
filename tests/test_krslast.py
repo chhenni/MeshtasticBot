@@ -6,7 +6,7 @@ Uses in-memory SQLite and a simple reply collector.
 import pytest
 from datetime import datetime, timezone, timedelta
 from db import init_db, store_message
-from main import handle_krslast_command
+from commands import handle_krslast_command
 from constants import MAX_BYTES, MAX_KRSLAST
 
 
