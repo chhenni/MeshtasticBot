@@ -2,10 +2,10 @@
 
 ## Small / quick wins
 
-- **`/ping`** — bot replies with uptime and node count, useful for checking the mesh is alive
-- **`/nodes`** — list currently seen nodes on the mesh with signal strength (RSSI/SNR)
-- **Rate limiting** — ignore repeated commands from the same sender within N seconds to prevent spam
-- **Config validation** — fail fast at startup with a clear error if `config.yaml` is missing required fields
+- ✅ **`/ping`** — bot replies with uptime and node count, useful for checking the mesh is alive
+- ✅ **`/nodes`** — list currently seen nodes on the mesh with signal strength (RSSI/SNR)
+- ✅ **Rate limiting** — ignore repeated commands from the same sender within N seconds to prevent spam
+- ✅ **Config validation** — fail fast at startup with a clear error if `config.yaml` is missing required fields
 
 ## Medium effort
 
