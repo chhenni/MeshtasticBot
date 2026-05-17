@@ -2,9 +2,8 @@
 Tests for marine.py — format_mvhf_channel and format_mvhf_list_messages.
 """
 
-import pytest
-from marine import format_mvhf_channel, format_mvhf_list_messages
 from constants import MAX_BYTES
+from marine import format_mvhf_channel, format_mvhf_list_messages
 
 
 class TestFormatMvhfChannel:

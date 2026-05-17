@@ -2,9 +2,8 @@
 Tests for radio.py — format_radio_messages byte safety and pagination.
 """
 
-import pytest
-from radio import format_radio_messages
 from constants import MAX_BYTES
+from radio import format_radio_messages
 
 
 def make_radio_data(n_hf_bands=10, include_vhf=True):

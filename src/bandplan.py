@@ -8,7 +8,7 @@ Each segment has:
 
 import re
 
-from constants import MAX_BYTES, PACK_BYTES
+from constants import PACK_BYTES
 
 # Each band entry:
 #   "range": human-readable frequency range string

@@ -7,12 +7,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bluez \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
 
 COPY src/ src/
 COPY tests/ tests/
-COPY conftest.py .
+COPY pyproject.toml .
 
 RUN python -m pytest tests/ -q --tb=short
 

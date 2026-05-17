@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 
 import requests
 
-from constants import MAX_BYTES, PACK_BYTES, USER_AGENT
+from constants import PACK_BYTES, USER_AGENT
 
 log = logging.getLogger(__name__)
 

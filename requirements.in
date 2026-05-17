@@ -1,0 +1,16 @@
+# Direct runtime dependencies only.
+# requirements.txt is the full pinned lockfile — regenerate with:
+#   pip-compile requirements.in
+
+bleak
+dbus-fast
+Flask
+meshtastic
+Pypubsub
+pyserial
+PyYAML
+requests
+pyobjc-core ; sys_platform == "darwin"
+pyobjc-framework-Cocoa ; sys_platform == "darwin"
+pyobjc-framework-CoreBluetooth ; sys_platform == "darwin"
+pyobjc-framework-libdispatch ; sys_platform == "darwin"

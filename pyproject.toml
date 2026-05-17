@@ -1,0 +1,15 @@
+[project]
+name = "meshtasticbot"
+version = "0.1.0"
+description = "A bot for Meshtastic LoRa mesh network devices"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]

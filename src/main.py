@@ -5,24 +5,29 @@ Also runs background tasks for weather alerts and database maintenance.
 Configuration is loaded from config.yaml. See config.yaml for available options.
 """
 
-import time
-import threading
-import logging
 import argparse
+import logging
+import threading
+import time
 from datetime import datetime, timezone
 from uuid import uuid4
 
-import yaml
+import meshtastic.ble_interface
 import meshtastic.serial_interface
 import meshtastic.tcp_interface
-import meshtastic.ble_interface
+import yaml
 from pubsub import pub
 
-from web import start_web_server
-from db import init_db, store_message, purge_old_messages
-from weather import get_lightning_alerts, format_alert_message, get_wind_alerts, format_wind_alert_message
+from commands import COMMANDS
+from db import init_db, purge_old_messages, store_message
 from dummy import DummyInterface, run_dummy_loop
-from commands import HELP_MESSAGES, COMMANDS
+from weather import (
+    format_alert_message,
+    format_wind_alert_message,
+    get_lightning_alerts,
+    get_wind_alerts,
+)
+from web import start_web_server
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -58,7 +63,13 @@ def connect(cfg: dict):
     raise ValueError(f"Unknown connection type: {kind!r}")
 
 
-def make_receive_handler(interface, channel: int, db_conn=None, log_channel: int | None = None, bot_state: dict | None = None):
+def make_receive_handler(
+    interface,
+    channel: int,
+    db_conn=None,
+    log_channel: int | None = None,
+    bot_state: dict | None = None,
+):
     def on_receive(packet, interface=interface):
         decoded = packet.get("decoded", {})
         text = decoded.get("text", "").strip()
