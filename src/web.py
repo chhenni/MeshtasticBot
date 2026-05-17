@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, jsonify, render_template, request
 
-from db import get_message_counts, get_messages_page
+from db import get_all_nodes, get_message_counts, get_messages_page
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +71,13 @@ def create_app(db_conn, bot_state: dict) -> Flask:
             counts=counts,
             uptime=uptime,
         )
+
+    @app.route("/nodes")
+    def nodes():
+        conn = app.config["db_conn"]
+        q = request.args.get("q", "").strip()
+        rows = get_all_nodes(conn, query=q or None) if conn else []
+        return render_template("nodes.html", rows=rows, q=q)
 
     @app.route("/api/messages")
     def api_messages():

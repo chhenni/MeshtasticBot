@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Nodes — MeshtasticBot{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Node Registry</h4>
+  <span class="text-muted small">{{ rows | length }} node{{ 's' if rows | length != 1 else '' }}</span>
+</div>
+
+<form class="row g-2 mb-4" method="get" action="/nodes">
+  <div class="col-sm-8 col-md-5">
+    <input type="text" name="q" class="form-control" placeholder="Search by ID or name…" value="{{ q }}">
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-primary" type="submit">Search</button>
+    {% if q %}
+    <a class="btn btn-outline-secondary" href="/nodes">Clear</a>
+    {% endif %}
+  </div>
+</form>
+
+{% if rows %}
+<div class="table-responsive">
+  <table class="table table-sm table-hover align-middle">
+    <thead class="table-dark">
+      <tr>
+        <th>Node ID</th>
+        <th>Name</th>
+        <th class="text-end">SNR</th>
+        <th class="text-end">RSSI</th>
+        <th>Last Seen (UTC)</th>
+        <th>Position</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for n in rows %}
+      <tr>
+        <td><code>{{ n.node_id }}</code></td>
+        <td>
+          {% if n.long_name %}
+            {{ n.long_name }}
+            {% if n.short_name %}<span class="text-muted small">({{ n.short_name }})</span>{% endif %}
+          {% elif n.short_name %}
+            {{ n.short_name }}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+        <td class="text-end">
+          {% if n.last_snr is not none %}
+            <span class="{% if n.last_snr >= 5 %}text-success{% elif n.last_snr >= 0 %}text-warning{% else %}text-danger{% endif %}">
+              {{ "%.1f"|format(n.last_snr) }}
+            </span>
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </td>
+        <td class="text-end">
+          {% if n.last_rssi is not none %}{{ n.last_rssi }}{% else %}<span class="text-muted">—</span>{% endif %}
+        </td>
+        <td class="font-monospace small">
+          {% if n.last_seen %}{{ n.last_seen[:19].replace('T', ' ') }}{% else %}—{% endif %}
+        </td>
+        <td>
+          {% if n.lat is not none and n.lon is not none %}
+            <a href="https://www.google.com/maps?q={{ n.lat }},{{ n.lon }}" target="_blank" rel="noopener"
+               class="badge bg-secondary text-decoration-none"
+               title="{{ '%.4f'|format(n.lat) }}, {{ '%.4f'|format(n.lon) }}">
+              📍 Map
+            </a>
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-secondary">
+  {% if q %}Ingen noder funnet for <strong>{{ q }}</strong>.{% else %}Ingen noder registrert ennå.{% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

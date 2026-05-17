@@ -243,3 +243,26 @@ def lookup_nodes_by_name(conn: sqlite3.Connection, query: str) -> list[dict]:
     except sqlite3.Error as exc:
         log.error(f"Failed to lookup nodes by name (query={query!r}): {exc}")
         return []
+
+
+def get_all_nodes(conn: sqlite3.Connection, query: str | None = None) -> list[dict]:
+    """Return all nodes sorted by last_seen descending. Optionally filter by *query*."""
+    keys = ("node_id", "long_name", "short_name", "last_seen", "last_snr", "last_rssi", "lat", "lon")
+    try:
+        if query:
+            pattern = f"%{query}%"
+            cur = conn.execute(
+                "SELECT node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon "
+                "FROM nodes WHERE node_id LIKE ? OR long_name LIKE ? OR short_name LIKE ? "
+                "ORDER BY last_seen DESC",
+                (pattern, pattern, pattern),
+            )
+        else:
+            cur = conn.execute(
+                "SELECT node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon "
+                "FROM nodes ORDER BY last_seen DESC"
+            )
+        return [dict(zip(keys, row)) for row in cur.fetchall()]
+    except sqlite3.Error as exc:
+        log.error(f"Failed to get all nodes: {exc}")
+        return []
