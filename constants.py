@@ -8,3 +8,6 @@ USER_AGENT = "MeshtasticBot/1.0 github.com/chhenni/MeshtasticBot"
 
 # Maximum lookback for /krslog (7 days).
 MAX_KRSLOG_HOURS = 168
+
+# Maximum number of messages for /krslast.
+MAX_KRSLAST = 100

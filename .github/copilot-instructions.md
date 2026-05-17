@@ -54,6 +54,8 @@ python main.py
 | `/bandplan_check <freq>` | Look up allowed usage for a frequency. Accepts MHz, kHz or bare number (e.g. `/bandplan_check 14.225`, `/bandplan_check 14225 kHz`) |
 | `/calling <band>` | List calling frequencies for a band (IARU Region 1 / Norway) |
 | `/mvhf [channel]` | List Marine VHF channels (ITU Region 1 / Norway), or look up a specific channel number (e.g. `/mvhf 16`) |
+| `/krslog [t]` | Message log for the last t hours (default 24h, max 168h) |
+| `/krslast [n]` | Last n messages from the log (default 10, max 100) |
 
 **Rule: whenever a new command is added, always add it to both this table and the `HELP_MESSAGES` list in `main.py`.**
 

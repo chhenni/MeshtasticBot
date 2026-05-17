@@ -19,7 +19,7 @@ import meshtastic.ble_interface
 from pubsub import pub
 
 from web import start_web_server
-from db import init_db, store_message, get_recent_messages, purge_old_messages
+from db import init_db, store_message, get_recent_messages, get_last_messages, purge_old_messages
 
 from weather import get_lightning_alerts, format_alert_message, \
     get_wind_alerts, format_wind_alert_message, \
@@ -34,7 +34,7 @@ from dummy import DummyInterface, run_dummy_loop
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-from constants import MAX_BYTES, PACK_BYTES, MAX_KRSLOG_HOURS
+from constants import MAX_BYTES, PACK_BYTES, MAX_KRSLOG_HOURS, MAX_KRSLAST
 log = logging.getLogger(__name__)
 
 CONFIG_FILE = "config.yaml"
@@ -80,7 +80,8 @@ HELP_MESSAGES = [
     "/bandplan_check <freq> - Sjekk frekvens\n"
     "/calling <bånd> - Anropsfrekvenser\n"
     "/mvhf [kanal] - Marin VHF kanaler\n"
-    "/krslog [t] - Meldingslogg (std: 24t, maks: 168t)",
+    "/krslog [t] - Meldingslogg (std: 24t, maks: 168t)\n"
+    "/krslast [n] - Siste n meldinger (std: 10, maks: 100)",
 
     "Info [3/3]:\n"
     "- Kommandoer funker via DM\n"
@@ -302,6 +303,65 @@ def handle_krslog_command(text: str, reply_fn, db_conn, log_channel: int) -> Non
             reply_fn(page)
 
 
+def handle_krslast_command(text: str, reply_fn, db_conn, log_channel: int) -> None:
+    """Return the N most recent messages from the log channel. Default 10, max 100."""
+    parts = text.strip().split(maxsplit=1)
+    count = 10
+    if len(parts) >= 2:
+        try:
+            count = int(parts[1].strip())
+            if count < 1:
+                raise ValueError
+        except ValueError:
+            reply_fn(f"Bruk: /krslast [antall]\nEks: /krslast 20 (maks {MAX_KRSLAST})")
+            return
+        if count > MAX_KRSLAST:
+            count = MAX_KRSLAST
+            reply_fn(f"Maks {MAX_KRSLAST} – viser siste {MAX_KRSLAST} meldinger.")
+
+    if db_conn is None:
+        reply_fn("Meldingslogg er ikke aktivert.")
+        return
+
+    rows = get_last_messages(db_conn, log_channel, count)
+    if not rows:
+        reply_fn("Ingen meldinger i loggen.")
+        return
+
+    log.info(f"/krslast {count} — {len(rows)} message(s)")
+
+    header = f"Siste {len(rows)} meldinger:"
+    pages: list[str] = []
+    current_lines: list[str] = []
+    include_header = True
+
+    for r in rows:
+        ts = r["received_at"][11:16]  # HH:MM
+        line = f"{ts} {r['sender_id']}: {r['text']}"
+        candidate = (header + "\n" + "\n".join(current_lines + [line])
+                     if include_header else "\n".join(current_lines + [line]))
+        if current_lines and len(candidate.encode("utf-8")) > PACK_BYTES:
+            pages.append(header + "\n" + "\n".join(current_lines)
+                         if include_header else "\n".join(current_lines))
+            current_lines = [line]
+            include_header = False
+        else:
+            current_lines.append(line)
+
+    if current_lines:
+        pages.append(header + "\n" + "\n".join(current_lines)
+                     if include_header else "\n".join(current_lines))
+
+    total_pages = len(pages)
+    for i, page in enumerate(pages):
+        if i > 0:
+            time.sleep(3)
+        if total_pages > 1:
+            reply_fn(f"[{i+1}/{total_pages}] {page}")
+        else:
+            reply_fn(page)
+
+
 def make_receive_handler(interface, channel: int, db_conn=None, log_channel: int | None = None, bot_state: dict | None = None):
     def on_receive(packet, interface=interface):
         decoded = packet.get("decoded", {})
@@ -362,6 +422,10 @@ def make_receive_handler(interface, channel: int, db_conn=None, log_channel: int
 
         if text.lower().startswith("/mvhf"):
             handle_mvhf_command(text, reply_fn)
+            return
+
+        if text.lower().startswith("/krslast"):
+            handle_krslast_command(text, reply_fn, db_conn, log_channel)
             return
 
         if text.lower().startswith("/krslog"):

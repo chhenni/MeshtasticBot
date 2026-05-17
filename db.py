@@ -53,6 +53,26 @@ def get_recent_messages(
         return []
 
 
+def get_last_messages(
+    conn: sqlite3.Connection,
+    channel: int,
+    limit: int = 10,
+) -> list[dict]:
+    """Return the *limit* most recent messages from *channel*, in chronological order."""
+    try:
+        cur = conn.execute(
+            "SELECT sender_id, text, received_at FROM ("
+            "  SELECT sender_id, text, received_at FROM messages "
+            "  WHERE channel = ? ORDER BY received_at DESC LIMIT ?"
+            ") ORDER BY received_at ASC",
+            (channel, limit),
+        )
+        return [{"sender_id": r[0], "text": r[1], "received_at": r[2]} for r in cur.fetchall()]
+    except sqlite3.Error as exc:
+        log.error(f"Failed to query last messages: {exc}")
+        return []
+
+
 def get_messages_page(
     conn: sqlite3.Connection,
     channel: int | None,
