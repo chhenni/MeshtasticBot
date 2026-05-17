@@ -61,6 +61,8 @@ python main.py
 
 ## Workflow Rules
 
+- **Use test-driven development (TDD) whenever possible.**
+  Write tests before or alongside the implementation, not after. A feature is not done until its tests are written and passing.
 - **After making code changes, always run `ruff check src/ tests/` and fix any issues before committing.**
 - **Before every commit, run `git status` to confirm nothing is accidentally left unstaged.**
   Use `git add -u` or `git add .` rather than listing files by name to avoid missing files modified by tools (e.g. `ruff --fix`).
