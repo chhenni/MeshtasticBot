@@ -5,9 +5,9 @@ Provides init_db() to open/create the database and store_message() to persist
 received channel messages with deduplication by packet ID.
 """
 
+import logging
 import os
 import sqlite3
-import logging
 
 log = logging.getLogger(__name__)
 

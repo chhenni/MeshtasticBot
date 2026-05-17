@@ -4,14 +4,14 @@ Web UI for MeshtasticBot — read-only log viewer and status dashboard.
 Started as a daemon thread from main.py when web.enabled is true in config.yaml.
 """
 
-import math
 import logging
+import math
 import threading
 from datetime import datetime, timezone
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, jsonify, render_template, request
 
-from db import get_messages_page, get_message_counts
+from db import get_message_counts, get_messages_page
 
 log = logging.getLogger(__name__)
 

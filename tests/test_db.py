@@ -2,9 +2,11 @@
 Tests for db.py — store_message, get_recent_messages (in-memory SQLite).
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
-from datetime import datetime, timezone, timedelta
-from db import init_db, store_message, get_recent_messages, purge_old_messages
+
+from db import get_recent_messages, init_db, purge_old_messages, store_message
 
 
 @pytest.fixture

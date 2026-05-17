@@ -3,18 +3,19 @@ Tests for weather.py — formatting functions and alert filtering.
 No network calls are made; all tests use synthetic data.
 """
 
+from datetime import date, datetime, timedelta, timezone
+
 import pytest
-from datetime import date, datetime, timezone, timedelta
+
+from constants import MAX_BYTES
 from weather import (
-    format_forecast_messages,
-    format_forecast_24h_messages,
     format_alert_message,
+    format_forecast_24h_messages,
+    format_forecast_messages,
     format_wind_alert_message,
     get_lightning_alerts,
     get_wind_alerts,
 )
-from constants import MAX_BYTES
-
 
 # ---------------------------------------------------------------------------
 # Fixture helpers

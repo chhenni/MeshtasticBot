@@ -3,11 +3,13 @@ Tests for handle_krslast_command in main.py.
 Uses in-memory SQLite and a simple reply collector.
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
-from datetime import datetime, timezone, timedelta
-from db import init_db, store_message
+
 from commands import handle_krslast_command
 from constants import MAX_BYTES, MAX_KRSLAST
+from db import init_db, store_message
 
 
 @pytest.fixture

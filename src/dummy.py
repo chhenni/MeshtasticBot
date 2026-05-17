@@ -6,7 +6,6 @@ Activate with:  python main.py --dummy
 
 from uuid import uuid4
 
-
 # Fake GPS position used for all GPS-dependent commands (Oslo city centre)
 DUMMY_NODE_ID = "!dummy"
 DUMMY_LAT = 59.9139

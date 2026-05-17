@@ -4,17 +4,17 @@ and the message formatting functions.
 """
 
 import pytest
+
 from bandplan import (
-    resolve_band,
-    parse_frequency_mhz,
-    lookup_frequency,
-    format_bandplan_messages,
-    format_calling_messages,
     BANDPLAN,
     CALLING_FREQUENCIES,
+    format_bandplan_messages,
+    format_calling_messages,
+    lookup_frequency,
+    parse_frequency_mhz,
+    resolve_band,
 )
 from constants import MAX_BYTES
-
 
 # ---------------------------------------------------------------------------
 # resolve_band

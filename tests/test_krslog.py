@@ -3,11 +3,13 @@ Tests for handle_krslog_command in main.py.
 Uses in-memory SQLite and a simple reply collector instead of a real interface.
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
-from datetime import datetime, timezone, timedelta
-from db import init_db, store_message
+
 from commands import handle_krslog_command
 from constants import MAX_BYTES, MAX_KRSLOG_HOURS
+from db import init_db, store_message
 
 
 @pytest.fixture
