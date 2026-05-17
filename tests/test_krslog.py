@@ -18,7 +18,8 @@ def conn():
 def collect_replies(conn, text, log_channel=1):
     """Call handle_krslog_command and collect all reply strings."""
     replies = []
-    handle_krslog_command(text, replies.append, conn, log_channel)
+    ctx = {"db_conn": conn, "log_channel": log_channel, "interface": None, "sender": None}
+    handle_krslog_command(text, replies.append, ctx)
     return replies
 
 
@@ -38,7 +39,8 @@ class TestKrslogCommand:
 
     def test_disabled_db_returns_info(self):
         replies = []
-        handle_krslog_command("/krslog", replies.append, None, 1)
+        ctx = {"db_conn": None, "log_channel": 1, "interface": None, "sender": None}
+        handle_krslog_command("/krslog", replies.append, ctx)
         assert "ikke aktivert" in replies[0]
 
     def test_single_message_no_counter(self, conn):

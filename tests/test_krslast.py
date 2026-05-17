@@ -17,7 +17,8 @@ def conn():
 
 def collect_replies(conn, text, log_channel=1):
     replies = []
-    handle_krslast_command(text, replies.append, conn, log_channel)
+    ctx = {"db_conn": conn, "log_channel": log_channel, "interface": None, "sender": None}
+    handle_krslast_command(text, replies.append, ctx)
     return replies
 
 
@@ -36,7 +37,8 @@ class TestKrslastCommand:
 
     def test_disabled_db_returns_info(self):
         replies = []
-        handle_krslast_command("/krslast", replies.append, None, 1)
+        ctx = {"db_conn": None, "log_channel": 1, "interface": None, "sender": None}
+        handle_krslast_command("/krslast", replies.append, ctx)
         assert "ikke aktivert" in replies[0]
 
     def test_default_returns_last_10(self, conn):

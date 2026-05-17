@@ -1,8 +1,17 @@
 """
 Command handlers for MeshtasticBot.
 
-Each handle_*_command() function receives the raw text, a reply callable,
-and any domain-specific dependencies (interface, db_conn, etc.).
+Every handler has the uniform signature:
+    handler(text: str, reply_fn: callable, ctx: dict) -> None
+
+ctx keys available to all handlers:
+    interface   — Meshtastic interface (for GPS lookups, sending)
+    sender      — sender node ID string
+    db_conn     — sqlite3.Connection or None
+    log_channel — int or None
+
+The COMMANDS dict at the bottom maps command word → handler.
+on_receive in main.py looks up text.split()[0] and calls the handler.
 """
 
 import time
@@ -48,22 +57,12 @@ HELP_MESSAGES = [
 ]
 
 
-def generate_reply(text: str, sender_id: str) -> str | None:
-    """
-    Return a reply string, or None to stay silent.
-    Customize this function to implement your bot logic.
-    Note: commands are handled separately in make_receive_handler.
-    """
-    return None
-
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
 
 def _send_pages(reply_fn, pages: list[str]) -> None:
-    """Send a list of page strings, sleeping 3 s between each and adding
-    [N/total] counters when there is more than one page."""
+    """Send pages with [N/total] counters, sleeping 3 s between each."""
     total = len(pages)
     for i, page in enumerate(pages):
         if i > 0:
@@ -72,7 +71,7 @@ def _send_pages(reply_fn, pages: list[str]) -> None:
 
 
 def _build_log_pages(rows: list[dict], header: str) -> list[str]:
-    """Pack a list of log row dicts into byte-safe pages under PACK_BYTES."""
+    """Pack log row dicts into byte-safe pages under PACK_BYTES."""
     pages: list[str] = []
     current_lines: list[str] = []
     include_header = True
@@ -98,51 +97,49 @@ def _build_log_pages(rows: list[dict], header: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Command handlers
+# Command handlers  —  signature: (text, reply_fn, ctx)
 # ---------------------------------------------------------------------------
 
-def handle_help_command(reply_fn) -> None:
+def handle_help_command(text: str, reply_fn, ctx: dict) -> None:
     for i, msg in enumerate(HELP_MESSAGES):
         if i > 0:
             time.sleep(2)
         reply_fn(msg)
 
 
-def handle_weather_command(interface, reply_fn, sender_id: str) -> None:
+def handle_weather_command(text: str, reply_fn, ctx: dict) -> None:
     """Look up sender position, fetch 7-day forecast, send multi-message reply."""
-    pos = get_node_position(interface, sender_id)
+    interface, sender = ctx["interface"], ctx["sender"]
+    pos = get_node_position(interface, sender)
     if pos is None:
         reply_fn("Ingen GPS-posisjon funnet for din node. Del posisjon og prøv igjen.")
         return
-
     lat, lon = pos
-    log.info(f"/weather requested by {sender_id} at ({lat}, {lon})")
+    log.info(f"/weather requested by {sender} at ({lat}, {lon})")
     forecast = get_forecast(lat, lon)
     if forecast is None:
         reply_fn("Klarte ikke hente varsel fra yr.no.")
         return
-
     _send_pages(reply_fn, format_forecast_messages(forecast, lat, lon))
 
 
-def handle_24h_command(interface, reply_fn, sender_id: str) -> None:
+def handle_24h_command(text: str, reply_fn, ctx: dict) -> None:
     """Look up sender position, fetch 24-hour forecast, send multi-message reply."""
-    pos = get_node_position(interface, sender_id)
+    interface, sender = ctx["interface"], ctx["sender"]
+    pos = get_node_position(interface, sender)
     if pos is None:
         reply_fn("Ingen GPS-posisjon funnet for din node. Del posisjon og prøv igjen.")
         return
-
     lat, lon = pos
-    log.info(f"/24hour requested by {sender_id} at ({lat}, {lon})")
+    log.info(f"/24hour requested by {sender} at ({lat}, {lon})")
     forecast = get_forecast_24h(lat, lon)
     if forecast is None:
         reply_fn("Klarte ikke hente varsel fra yr.no.")
         return
-
     _send_pages(reply_fn, format_forecast_24h_messages(forecast, lat, lon))
 
 
-def handle_radio_command(reply_fn) -> None:
+def handle_radio_command(text: str, reply_fn, ctx: dict) -> None:
     """Fetch amateur radio band conditions and send as multi-message reply."""
     data = get_radio_forecast()
     if data is None:
@@ -151,61 +148,54 @@ def handle_radio_command(reply_fn) -> None:
     _send_pages(reply_fn, format_radio_messages(data))
 
 
-def handle_calling_command(text: str, reply_fn) -> None:
+def handle_calling_command(text: str, reply_fn, ctx: dict) -> None:
     """Parse band from command text and send calling frequencies."""
     parts = text.strip().split(maxsplit=1)
     if len(parts) < 2 or not parts[1].strip():
         reply_fn(f"Bruk: /calling <bånd>\nTilgjengelig: {', '.join(CALLING_FREQUENCIES.keys())}")
         return
-
     band = resolve_band(parts[1])
     if band is None or band not in CALLING_FREQUENCIES:
         reply_fn(f"Ukjent bånd '{parts[1]}'.\nTilgjengelig: {', '.join(CALLING_FREQUENCIES.keys())}")
         return
-
     log.info(f"/calling {band} requested")
     _send_pages(reply_fn, format_calling_messages(band))
 
 
-def handle_bandplan_check_command(text: str, reply_fn) -> None:
+def handle_bandplan_check_command(text: str, reply_fn, ctx: dict) -> None:
     """Parse a frequency from command text and reply with the allowed usage."""
     parts = text.strip().split(maxsplit=1)
     if len(parts) < 2 or not parts[1].strip():
         reply_fn("Bruk: /bandplan_check <frekvens>\nEks: /bandplan_check 14.225\n     /bandplan_check 144300 kHz")
         return
-
     freq_mhz = parse_frequency_mhz(parts[1])
     if freq_mhz is None:
         reply_fn(f"Kunne ikke tolke frekvens: '{parts[1]}'.\nEks: 14.225 / 14.225 MHz / 14225 kHz")
         return
-
     result = lookup_frequency(freq_mhz)
     if result is None:
         reply_fn(f"{freq_mhz:.4f} MHz er ikke innenfor et amatørradio-bånd (IARU Region 1).")
         return
-
     band, freq_range, mode = result
     reply_fn(f"{freq_mhz:.4f} MHz → {band}\n{freq_range} MHz\n{mode}")
     log.info(f"/bandplan_check {freq_mhz} MHz -> {band} {mode}")
 
 
-def handle_bandplan_command(text: str, reply_fn) -> None:
+def handle_bandplan_command(text: str, reply_fn, ctx: dict) -> None:
     """Parse band from command text and send band plan segments."""
     parts = text.strip().split(maxsplit=1)
     if len(parts) < 2 or not parts[1].strip():
         reply_fn(f"Bruk: /bandplan <bånd>\nTilgjengelig: {', '.join(BANDPLAN.keys())}")
         return
-
     band = resolve_band(parts[1])
     if band is None:
         reply_fn(f"Ukjent bånd '{parts[1]}'.\nTilgjengelig: {', '.join(BANDPLAN.keys())}")
         return
-
     log.info(f"/bandplan {band} requested")
     _send_pages(reply_fn, format_bandplan_messages(band))
 
 
-def handle_mvhf_command(text: str, reply_fn) -> None:
+def handle_mvhf_command(text: str, reply_fn, ctx: dict) -> None:
     """List key Marine VHF channels, or look up a specific channel."""
     parts = text.strip().split(maxsplit=1)
     if len(parts) >= 2 and parts[1].strip():
@@ -214,8 +204,9 @@ def handle_mvhf_command(text: str, reply_fn) -> None:
     _send_pages(reply_fn, format_mvhf_list_messages(groups=["Nød/DSC", "Havn/trafikk"]))
 
 
-def handle_krslog_command(text: str, reply_fn, db_conn, log_channel: int) -> None:
+def handle_krslog_command(text: str, reply_fn, ctx: dict) -> None:
     """Return recent messages from the log channel. Optional arg overrides the hour window."""
+    db_conn, log_channel = ctx["db_conn"], ctx["log_channel"]
     parts = text.strip().split(maxsplit=1)
     hours = 24
     if len(parts) >= 2:
@@ -233,18 +224,17 @@ def handle_krslog_command(text: str, reply_fn, db_conn, log_channel: int) -> Non
     if db_conn is None:
         reply_fn("Meldingslogg er ikke aktivert.")
         return
-
     rows = get_recent_messages(db_conn, log_channel, hours)
     if not rows:
         reply_fn(f"Ingen meldinger siste {hours}t.")
         return
-
     log.info(f"/krslog {hours}h — {len(rows)} message(s)")
     _send_pages(reply_fn, _build_log_pages(rows, f"Logg siste {hours}t:"))
 
 
-def handle_krslast_command(text: str, reply_fn, db_conn, log_channel: int) -> None:
+def handle_krslast_command(text: str, reply_fn, ctx: dict) -> None:
     """Return the N most recent messages from the log channel. Default 10, max 100."""
+    db_conn, log_channel = ctx["db_conn"], ctx["log_channel"]
     parts = text.strip().split(maxsplit=1)
     count = 10
     if len(parts) >= 2:
@@ -262,11 +252,29 @@ def handle_krslast_command(text: str, reply_fn, db_conn, log_channel: int) -> No
     if db_conn is None:
         reply_fn("Meldingslogg er ikke aktivert.")
         return
-
     rows = get_last_messages(db_conn, log_channel, count)
     if not rows:
         reply_fn("Ingen meldinger i loggen.")
         return
-
     log.info(f"/krslast {count} — {len(rows)} message(s)")
     _send_pages(reply_fn, _build_log_pages(rows, f"Siste {len(rows)} meldinger:"))
+
+
+# ---------------------------------------------------------------------------
+# Command registry  —  maps first word of message → handler
+# To add a new command: implement a handler above, add it here. That's it.
+# ---------------------------------------------------------------------------
+
+COMMANDS: dict[str, callable] = {
+    "/help":           handle_help_command,
+    "/weather":        handle_weather_command,
+    "/24hour":         handle_24h_command,
+    "/24h":            handle_24h_command,
+    "/radio":          handle_radio_command,
+    "/mvhf":           handle_mvhf_command,
+    "/krslast":        handle_krslast_command,
+    "/krslog":         handle_krslog_command,
+    "/bandplan_check": handle_bandplan_check_command,
+    "/calling":        handle_calling_command,
+    "/bandplan":       handle_bandplan_command,
+}

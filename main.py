@@ -22,13 +22,7 @@ from web import start_web_server
 from db import init_db, store_message, purge_old_messages
 from weather import get_lightning_alerts, format_alert_message, get_wind_alerts, format_wind_alert_message
 from dummy import DummyInterface, run_dummy_loop
-from commands import (
-    HELP_MESSAGES, generate_reply,
-    handle_help_command, handle_weather_command, handle_24h_command,
-    handle_radio_command, handle_calling_command, handle_bandplan_check_command,
-    handle_bandplan_command, handle_mvhf_command,
-    handle_krslog_command, handle_krslast_command,
-)
+from commands import HELP_MESSAGES, COMMANDS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -106,49 +100,16 @@ def make_receive_handler(interface, channel: int, db_conn=None, log_channel: int
         if reply_fn is None:
             return
 
-        if text.lower().startswith("/help"):
-            handle_help_command(reply_fn)
-            return
-
-        if text.lower().startswith("/weather"):
-            handle_weather_command(interface, reply_fn, sender)
-            return
-
-        if text.lower().startswith("/24hour") or text.lower().startswith("/24h"):
-            handle_24h_command(interface, reply_fn, sender)
-            return
-
-        if text.lower().startswith("/radio"):
-            handle_radio_command(reply_fn)
-            return
-
-        if text.lower().startswith("/mvhf"):
-            handle_mvhf_command(text, reply_fn)
-            return
-
-        if text.lower().startswith("/krslast"):
-            handle_krslast_command(text, reply_fn, db_conn, log_channel)
-            return
-
-        if text.lower().startswith("/krslog"):
-            handle_krslog_command(text, reply_fn, db_conn, log_channel)
-            return
-
-        if text.lower().startswith("/bandplan_check"):
-            handle_bandplan_check_command(text, reply_fn)
-            return
-
-        if text.lower().startswith("/calling"):
-            handle_calling_command(text, reply_fn)
-            return
-
-        if text.lower().startswith("/bandplan"):
-            handle_bandplan_command(text, reply_fn)
-            return
-
-        reply = generate_reply(text, sender)
-        if reply:
-            reply_fn(reply)
+        ctx = {
+            "interface": interface,
+            "sender": sender,
+            "db_conn": db_conn,
+            "log_channel": log_channel,
+        }
+        cmd = text.split()[0].lower()
+        handler = COMMANDS.get(cmd)
+        if handler:
+            handler(text, reply_fn, ctx)
 
     return on_receive
 
