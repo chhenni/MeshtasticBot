@@ -23,11 +23,18 @@ class DummyInterface:
     def nodes(self) -> dict:
         return {
             DUMMY_NODE_ID: {
-                "position": {
-                    "latitude": DUMMY_LAT,
-                    "longitude": DUMMY_LON,
-                }
-            }
+                "user": {"longName": "Dummy Node", "shortName": "DUM"},
+                "snr": 8.5,
+                "position": {"latitude": DUMMY_LAT, "longitude": DUMMY_LON},
+            },
+            "!aabbccdd": {
+                "user": {"longName": "Test Node Alpha", "shortName": "TNA"},
+                "snr": 5.25,
+            },
+            "!11223344": {
+                "user": {"longName": "Test Node Beta", "shortName": "TNB"},
+                "snr": -2.0,
+            },
         }
 
     def sendText(self, text: str, channelIndex: int = 0, destinationId: str | None = None) -> None:

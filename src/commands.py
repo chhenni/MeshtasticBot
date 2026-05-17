@@ -46,6 +46,7 @@ HELP_MESSAGES = [
     "Kommandoer [1/3]:\n"
     "/help - Vis hjelp\n"
     "/ping - Status og oppetid\n"
+    "/nodes - Vis noder på meshet\n"
     "/weather - 7-dagers varsel (GPS)\n"
     "/24hour|/24h - 24t timevarsel (GPS)",
 
@@ -121,6 +122,40 @@ def handle_ping_command(text: str, reply_fn, ctx: dict) -> None:
 
     nodes = ctx["interface"].nodes or {}
     reply_fn(f"🟢 Pong! Oppe: {uptime} | Noder sett: {len(nodes)}")
+
+
+def handle_nodes_command(text: str, reply_fn, ctx: dict) -> None:
+    """List mesh nodes currently seen by the interface with SNR."""
+    nodes: dict = ctx["interface"].nodes or {}
+    if not nodes:
+        reply_fn("Ingen noder sett ennå.")
+        return
+
+    lines = []
+    for node_id, info in nodes.items():
+        name = (info.get("user", {}).get("longName")
+                or info.get("user", {}).get("shortName")
+                or node_id)
+        snr = info.get("snr")
+        snr_str = f" SNR:{snr:.1f}" if snr is not None else ""
+        lines.append(f"{node_id} {name}{snr_str}")
+
+    header = f"Noder ({len(nodes)}):"
+    pages: list[str] = []
+    current: list[str] = []
+    use_header = True
+    for line in lines:
+        block = (header + "\n" + "\n".join(current + [line])) if use_header else "\n".join(current + [line])
+        if current and len(block.encode("utf-8")) > PACK_BYTES:
+            pages.append((header + "\n" + "\n".join(current)) if use_header else "\n".join(current))
+            current = [line]
+            use_header = False
+        else:
+            current.append(line)
+    if current:
+        pages.append((header + "\n" + "\n".join(current)) if use_header else "\n".join(current))
+
+    _send_pages(reply_fn, pages)
 
 
 def handle_help_command(text: str, reply_fn, ctx: dict) -> None:
@@ -290,6 +325,7 @@ def handle_krslast_command(text: str, reply_fn, ctx: dict) -> None:
 
 COMMANDS: dict[str, callable] = {
     "/ping":           handle_ping_command,
+    "/nodes":          handle_nodes_command,
     "/help":           handle_help_command,
     "/weather":        handle_weather_command,
     "/24hour":         handle_24h_command,
