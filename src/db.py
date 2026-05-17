@@ -37,10 +37,17 @@ CREATE TABLE IF NOT EXISTS nodes (
 
 
 def init_db(path: str) -> sqlite3.Connection:
-    """Open (or create) the SQLite database at *path* and return the connection."""
+    """Open (or create) the SQLite database at *path* and return the connection.
+
+    WAL journal mode is enabled for safe concurrent access from multiple threads
+    (receiver, web UI, purge loop, node sync loop). busy_timeout gives threads up
+    to 5 seconds to retry before raising SQLITE_BUSY.
+    """
     if path != ":memory:":
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     conn = sqlite3.connect(path, check_same_thread=False)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")  # ms — retry for up to 5 s on lock contention
     conn.execute(CREATE_TABLE_SQL)
     conn.execute(CREATE_NODES_TABLE_SQL)
     conn.commit()

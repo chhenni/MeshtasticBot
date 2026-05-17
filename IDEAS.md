@@ -22,7 +22,7 @@
 
 ## Reliability & correctness
 
-- **SQLite WAL mode** — enable `PRAGMA journal_mode=WAL` + `timeout=10` in `init_db()` to prevent `SQLITE_BUSY` errors under concurrent writes from the receiver, purge loop, node sync loop and Flask threads. Two-liner fix, high impact.
+- ✅ **SQLite WAL mode** — enable `PRAGMA journal_mode=WAL` + `busy_timeout=5000` in `init_db()` to prevent `SQLITE_BUSY` errors under concurrent writes from the receiver, purge loop, node sync loop and Flask threads. Two-liner fix, high impact.
 - **Connection reconnect** — if the Meshtastic device disconnects, the bot currently dies; add exponential backoff retry around `connect()` so it recovers automatically
 - **Graceful shutdown** — all background threads are `daemon=True` and get killed abruptly on exit; add a `shutdown_event` + signal handlers (SIGTERM/SIGINT) so Flask, DB writes and the weather loop can finish cleanly
 - **Typed `ctx` dict** — handlers assume specific keys exist in `ctx` and crash if missing; replace the plain `dict` with a `TypedDict` or dataclass so key errors are caught by type checkers

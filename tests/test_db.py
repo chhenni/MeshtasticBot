@@ -93,3 +93,27 @@ class TestPurgeOldMessages:
 
     def test_purge_returns_zero_on_empty_db(self, conn):
         assert purge_old_messages(conn, days=365) == 0
+
+
+class TestDatabaseSettings:
+    def test_wal_mode_enabled(self, tmp_path):
+        """init_db should enable WAL journal mode for thread-safe concurrent access."""
+        import db as db_module
+        conn = db_module.init_db(str(tmp_path / "test.db"))
+        row = conn.execute("PRAGMA journal_mode").fetchone()
+        assert row[0] == "wal"
+
+    def test_timeout_allows_retry_on_busy(self, tmp_path):
+        """Connection should have a non-zero busy timeout so threads retry on SQLITE_BUSY."""
+        import db as db_module
+        conn = db_module.init_db(str(tmp_path / "test.db"))
+        row = conn.execute("PRAGMA busy_timeout").fetchone()
+        assert row[0] > 0
+
+    def test_wal_not_set_for_memory_db(self):
+        """In-memory DBs used in tests don't need WAL (it's silently ignored)."""
+        conn = init_db(":memory:")
+        # :memory: with WAL silently falls back to 'memory' mode — just check no crash
+        row = conn.execute("PRAGMA journal_mode").fetchone()
+        assert row[0] in ("wal", "memory")
+
