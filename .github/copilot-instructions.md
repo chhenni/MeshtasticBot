@@ -71,9 +71,8 @@ python main.py
   Meshtastic's byte limit is a hard constraint, and messages routinely contain
   multi-byte characters (Norwegian: ø, æ, å — and emojis: ⚡, 💨, 📻, 🟢).
   `len(s)` counts Unicode code points, not bytes, and will undercount silently.
-- When building paginated messages, pack against `PACK_BYTES` (= `MAX_BYTES - 10`),
-  not `MAX_BYTES`, to leave room for the `[N/total]` prefix that is added afterwards.
-  Both constants are defined in `constants.py`.
+- **When adding a new web page or API endpoint, always ask the user whether it needs authentication before implementing.**
+  Current pages (logs, status, nodes, /api/messages) are intentionally unauthenticated. New pages may expose sensitive functionality and should be considered individually.
 
 ## Docker
 
