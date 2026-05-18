@@ -111,8 +111,10 @@ def make_receive_handler(
     bucket_size: float = 5.0,
     refill_rate: float = 0.1,  # tokens per second (default: 1 token / 10 s)
 ):
-    # Token bucket state: sender → (tokens, last_refill_timestamp)
-    _buckets: dict[str, list] = {}  # list used for mutability: [tokens, last_refill]
+    # Token bucket state: sender → [tokens, last_refill_timestamp]
+    _buckets: dict[str, list] = {}
+    # Senders who have already received a rate-limit warning (cleared on next success)
+    _warned: set[str] = set()
 
     def _get_tokens(sender: str) -> list:
         if sender not in _buckets:
@@ -188,8 +190,12 @@ def make_receive_handler(
         bucket = _get_tokens(sender)
         if bucket[0] < cost:
             log.info(f"Rate limit: dropping {cmd} from {sender} (need {cost} tokens, have {bucket[0]:.1f})")
+            if sender not in _warned:
+                _warned.add(sender)
+                reply_fn("⛔ For mange kommandoer på kort tid. Vent litt og prøv igjen.")
             return
         bucket[0] -= cost
+        _warned.discard(sender)
 
         ctx = {
             "interface": interface,

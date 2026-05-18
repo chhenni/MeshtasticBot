@@ -155,3 +155,81 @@ class TestTokenBucket:
             with patch("main.COMMAND_COSTS", {"/weather": 3}):
                 handler(make_packet("/weather"))
         assert mock_cmd.call_count == 0
+
+
+class TestRateLimitWarning:
+    """Option A: warn once when bucket empties, silence until next success."""
+
+    def _make_ping(self):
+        """A simple command that calls reply_fn once."""
+        def cmd(text, reply_fn, ctx):
+            reply_fn("pong")
+        return cmd
+
+    def test_first_block_sends_warning(self):
+        """When bucket first empties, one warning is sent via reply_fn."""
+        iface = MagicMock()
+        iface.nodes = {}
+        handler = make_receive_handler(iface, channel=1, bucket_size=1, refill_rate=0)
+        cmd = self._make_ping()
+
+        with patch("main.COMMANDS", {"/ping": cmd}):
+            with patch("main.COMMAND_COSTS", {"/ping": 1}):
+                handler(make_packet("/ping"))   # succeeds → 1 reply
+                handler(make_packet("/ping"))   # blocked → 1 warning
+
+        # 1 cmd reply + 1 warning = 2 sendText calls
+        assert iface.sendText.call_count == 2
+
+    def test_second_block_is_silent(self):
+        """After warning is sent, further blocked attempts produce no reply."""
+        iface = MagicMock()
+        iface.nodes = {}
+        handler = make_receive_handler(iface, channel=1, bucket_size=1, refill_rate=0)
+        cmd = self._make_ping()
+
+        with patch("main.COMMANDS", {"/ping": cmd}):
+            with patch("main.COMMAND_COSTS", {"/ping": 1}):
+                handler(make_packet("/ping"))   # succeeds → reply
+                handler(make_packet("/ping"))   # blocked → warning
+                handler(make_packet("/ping"))   # blocked → silent
+                handler(make_packet("/ping"))   # blocked → silent
+
+        # 1 cmd reply + 1 warning only = 2
+        assert iface.sendText.call_count == 2
+
+    def test_warning_cleared_after_successful_command(self):
+        """After a successful command, warned flag resets so next block warns again."""
+        iface = MagicMock()
+        iface.nodes = {}
+        handler = make_receive_handler(iface, channel=1, bucket_size=1, refill_rate=5.0)
+        cmd = self._make_ping()
+
+        with patch("main.COMMANDS", {"/ping": cmd}):
+            with patch("main.COMMAND_COSTS", {"/ping": 1}):
+                handler(make_packet("/ping"))   # success (1→0)
+                handler(make_packet("/ping"))   # blocked → warning
+                handler(make_packet("/ping"))   # blocked → silent
+                time.sleep(0.3)                 # refill ~1.5 tokens
+                handler(make_packet("/ping"))   # success → warned flag cleared (1→0)
+                handler(make_packet("/ping"))   # blocked → new warning (flag was cleared)
+                handler(make_packet("/ping"))   # blocked → silent
+
+        # 2 successes + 2 warnings = 4
+        assert iface.sendText.call_count == 4
+
+    def test_warning_contains_useful_info(self):
+        """Warning message mentions rate limit and gives a hint."""
+        iface = MagicMock()
+        iface.nodes = {}
+        handler = make_receive_handler(iface, channel=1, bucket_size=1, refill_rate=0)
+        cmd = self._make_ping()
+
+        with patch("main.COMMANDS", {"/ping": cmd}):
+            with patch("main.COMMAND_COSTS", {"/ping": 1}):
+                handler(make_packet("/ping"))   # success
+                handler(make_packet("/ping"))   # blocked → warning
+
+        warning_text = iface.sendText.call_args_list[-1][0][0]
+        assert any(word in warning_text.lower() for word in ["rate", "limit", "slow", "vent", "prøv"])
+
