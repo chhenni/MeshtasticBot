@@ -20,6 +20,7 @@
 - **`/health` endpoint** — `GET /health` returns JSON with uptime, last message timestamp, DB size — useful for external monitoring
 - **Web route tests** — `tests/test_web.py` with Flask `test_client()` covering `/`, `/status`, `/nodes`, `/api/messages`
 - **Command audit log** — persist a log of every bot command (node ID, command, timestamp, whether it was rate-limited) to a dedicated `command_log` table in SQLite. Add a `/audit` web page showing the log with filters by node and command, so you can see who is using the bot and how often.
+- **User ban system** — persist a `banned_nodes` table in SQLite. Banned nodes are silently ignored (no reply). Management via the web UI: ban/unban buttons on the `/nodes` and `/audit` pages. Bans survive bot restarts. Consider whether the ban page needs authentication.
 
 ## Reliability & correctness
 
