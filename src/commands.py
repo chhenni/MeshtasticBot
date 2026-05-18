@@ -2,13 +2,7 @@
 Command handlers for MeshtasticBot.
 
 Every handler has the uniform signature:
-    handler(text: str, reply_fn: callable, ctx: dict) -> None
-
-ctx keys available to all handlers:
-    interface   — Meshtastic interface (for GPS lookups, sending)
-    sender      — sender node ID string
-    db_conn     — sqlite3.Connection or None
-    log_channel — int or None
+    handler(text: str, reply_fn: callable, ctx: BotContext) -> None
 
 The COMMANDS dict at the bottom maps command word → handler.
 on_receive in main.py looks up text.split()[0] and calls the handler.
@@ -28,6 +22,7 @@ from bandplan import (
     resolve_band,
 )
 from constants import MAX_KRSLAST, MAX_KRSLOG_HOURS, PACK_BYTES
+from context import BotContext
 from db import get_last_messages, get_node, get_recent_messages, lookup_nodes_by_name
 from marine import format_mvhf_channel, format_mvhf_list_messages
 from radio import format_radio_messages, get_radio_forecast
@@ -117,7 +112,7 @@ def _build_log_pages(rows: list[dict], header: str) -> list[str]:
 # Command handlers  —  signature: (text, reply_fn, ctx)
 # ---------------------------------------------------------------------------
 
-def handle_ping_command(text: str, reply_fn, ctx: dict) -> None:
+def handle_ping_command(text: str, reply_fn, ctx: BotContext) -> None:
     """Reply with uptime and number of nodes currently seen on the mesh."""
     start_time = ctx.get("start_time")
     if start_time:
@@ -132,7 +127,7 @@ def handle_ping_command(text: str, reply_fn, ctx: dict) -> None:
     reply_fn(f"🟢 Pong! Oppe: {uptime} | Noder sett: {len(nodes)}")
 
 
-def handle_nodes_command(text: str, reply_fn, ctx: dict) -> None:
+def handle_nodes_command(text: str, reply_fn, ctx: BotContext) -> None:
     """List mesh nodes currently seen by the interface with SNR."""
     nodes: dict = ctx["interface"].nodes or {}
     if not nodes:
@@ -166,7 +161,7 @@ def handle_nodes_command(text: str, reply_fn, ctx: dict) -> None:
     _send_pages(reply_fn, pages)
 
 
-def handle_alert_command(text: str, reply_fn, ctx: dict) -> None:
+def handle_alert_command(text: str, reply_fn, ctx: BotContext) -> None:
     """Fetch active lightning and wind alerts on demand and send them as replies."""
     county = ctx.get("county")
     if not county:
@@ -192,14 +187,14 @@ def handle_alert_command(text: str, reply_fn, ctx: dict) -> None:
     _send_pages(reply_fn, pages)
 
 
-def handle_help_command(text: str, reply_fn, ctx: dict) -> None:
+def handle_help_command(text: str, reply_fn, ctx: BotContext) -> None:
     for i, msg in enumerate(HELP_MESSAGES):
         if i > 0:
             time.sleep(2)
         reply_fn(msg)
 
 
-def handle_weather_command(text: str, reply_fn, ctx: dict) -> None:
+def handle_weather_command(text: str, reply_fn, ctx: BotContext) -> None:
     """Look up sender position, fetch 7-day forecast, send multi-message reply."""
     interface, sender = ctx["interface"], ctx["sender"]
     pos = get_node_position(interface, sender)
@@ -215,7 +210,7 @@ def handle_weather_command(text: str, reply_fn, ctx: dict) -> None:
     _send_pages(reply_fn, format_forecast_messages(forecast, lat, lon))
 
 
-def handle_24h_command(text: str, reply_fn, ctx: dict) -> None:
+def handle_24h_command(text: str, reply_fn, ctx: BotContext) -> None:
     """Look up sender position, fetch 24-hour forecast, send multi-message reply."""
     interface, sender = ctx["interface"], ctx["sender"]
     pos = get_node_position(interface, sender)
@@ -231,7 +226,7 @@ def handle_24h_command(text: str, reply_fn, ctx: dict) -> None:
     _send_pages(reply_fn, format_forecast_24h_messages(forecast, lat, lon))
 
 
-def handle_radio_command(text: str, reply_fn, ctx: dict) -> None:
+def handle_radio_command(text: str, reply_fn, ctx: BotContext) -> None:
     """Fetch amateur radio band conditions and send as multi-message reply."""
     data = get_radio_forecast()
     if data is None:
@@ -240,7 +235,7 @@ def handle_radio_command(text: str, reply_fn, ctx: dict) -> None:
     _send_pages(reply_fn, format_radio_messages(data))
 
 
-def handle_calling_command(text: str, reply_fn, ctx: dict) -> None:
+def handle_calling_command(text: str, reply_fn, ctx: BotContext) -> None:
     """Parse band from command text and send calling frequencies."""
     parts = text.strip().split(maxsplit=1)
     if len(parts) < 2 or not parts[1].strip():
@@ -254,7 +249,7 @@ def handle_calling_command(text: str, reply_fn, ctx: dict) -> None:
     _send_pages(reply_fn, format_calling_messages(band))
 
 
-def handle_bandplan_check_command(text: str, reply_fn, ctx: dict) -> None:
+def handle_bandplan_check_command(text: str, reply_fn, ctx: BotContext) -> None:
     """Parse a frequency from command text and reply with the allowed usage."""
     parts = text.strip().split(maxsplit=1)
     if len(parts) < 2 or not parts[1].strip():
@@ -273,7 +268,7 @@ def handle_bandplan_check_command(text: str, reply_fn, ctx: dict) -> None:
     log.info(f"/bandplan_check {freq_mhz} MHz -> {band} {mode}")
 
 
-def handle_bandplan_command(text: str, reply_fn, ctx: dict) -> None:
+def handle_bandplan_command(text: str, reply_fn, ctx: BotContext) -> None:
     """Parse band from command text and send band plan segments."""
     parts = text.strip().split(maxsplit=1)
     if len(parts) < 2 or not parts[1].strip():
@@ -287,7 +282,7 @@ def handle_bandplan_command(text: str, reply_fn, ctx: dict) -> None:
     _send_pages(reply_fn, format_bandplan_messages(band))
 
 
-def handle_mvhf_command(text: str, reply_fn, ctx: dict) -> None:
+def handle_mvhf_command(text: str, reply_fn, ctx: BotContext) -> None:
     """List key Marine VHF channels, or look up a specific channel."""
     parts = text.strip().split(maxsplit=1)
     if len(parts) >= 2 and parts[1].strip():
@@ -296,7 +291,7 @@ def handle_mvhf_command(text: str, reply_fn, ctx: dict) -> None:
     _send_pages(reply_fn, format_mvhf_list_messages(groups=["Nød/DSC", "Havn/trafikk"]))
 
 
-def handle_whois_command(text: str, reply_fn, ctx: dict) -> None:
+def handle_whois_command(text: str, reply_fn, ctx: BotContext) -> None:
     """Look up a node by ID or name. /whois !id  or  /whois <name>"""
     db_conn = ctx["db_conn"]
     parts = text.strip().split(maxsplit=1)
@@ -334,7 +329,7 @@ def handle_whois_command(text: str, reply_fn, ctx: dict) -> None:
     _send_pages(reply_fn, pages)
 
 
-def handle_krslog_command(text: str, reply_fn, ctx: dict) -> None:
+def handle_krslog_command(text: str, reply_fn, ctx: BotContext) -> None:
     """Return recent messages from the log channel. Optional arg overrides the hour window."""
     db_conn, log_channel = ctx["db_conn"], ctx["log_channel"]
     parts = text.strip().split(maxsplit=1)
@@ -362,7 +357,7 @@ def handle_krslog_command(text: str, reply_fn, ctx: dict) -> None:
     _send_pages(reply_fn, _build_log_pages(rows, f"Logg siste {hours}t:"))
 
 
-def handle_krslast_command(text: str, reply_fn, ctx: dict) -> None:
+def handle_krslast_command(text: str, reply_fn, ctx: BotContext) -> None:
     """Return the N most recent messages from the log channel. Default 10, max 100."""
     db_conn, log_channel = ctx["db_conn"], ctx["log_channel"]
     parts = text.strip().split(maxsplit=1)

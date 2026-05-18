@@ -21,6 +21,7 @@ import yaml
 from pubsub import pub
 
 from commands import COMMANDS
+from context import BotContext
 from db import init_db, is_banned, log_command, purge_old_messages, store_message, upsert_node
 from dummy import DummyInterface, run_dummy_loop
 from weather import (
@@ -315,7 +316,7 @@ def make_receive_handler(
         if db_conn is not None:
             log_command(db_conn, sender, cmd, "ok")
 
-        ctx = {
+        ctx: BotContext = {
             "interface": interface,
             "sender": sender,
             "db_conn": db_conn,
