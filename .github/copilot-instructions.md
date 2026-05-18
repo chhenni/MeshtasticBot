@@ -74,6 +74,8 @@ python main.py
   `len(s)` counts Unicode code points, not bytes, and will undercount silently.
 - **When adding a new web page or API endpoint, always ask the user whether it needs authentication before implementing.**
   Current pages (logs, status, nodes, /api/messages) are intentionally unauthenticated. New pages may expose sensitive functionality and should be considered individually.
+- **Track new ideas and planned work as GitHub Issues, not in `IDEAS.md`.**
+  When the user suggests a new idea or feature, create a GitHub issue using `gh issue create` with an appropriate label (`enhancement`, `reliability`, `ops`, `web-ui`, `testing`, `big-idea`). `IDEAS.md` is retained for historical reference only (completed ✅ items).
 
 ## Docker
 
