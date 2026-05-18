@@ -19,6 +19,7 @@
       <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">Logs</a>
       <a class="nav-link {% if request.path == '/status' %}active{% endif %}" href="/status">Status</a>
       <a class="nav-link {% if request.path == '/nodes' %}active{% endif %}" href="/nodes">Nodes</a>
+      <a class="nav-link {% if request.path == '/audit' %}active{% endif %}" href="/audit">Audit 🔒</a>
     </div>
   </nav>
   {% block content %}{% endblock %}

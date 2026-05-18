@@ -8,20 +8,48 @@ import logging
 import math
 import threading
 from datetime import datetime, timezone
+from functools import wraps
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, redirect, render_template, request, url_for
 
-from db import get_all_nodes, get_message_counts, get_messages_page
+from db import (
+    ban_node,
+    get_all_nodes,
+    get_banned_nodes,
+    get_command_log,
+    get_message_counts,
+    get_messages_page,
+    unban_node,
+)
 
 log = logging.getLogger(__name__)
 
 PAGE_SIZE = 50
 
 
-def create_app(db_conn, bot_state: dict) -> Flask:
+def create_app(db_conn, bot_state: dict, admin_username: str = "", admin_password: str = "") -> Flask:
     app = Flask(__name__)
     app.config["db_conn"] = db_conn
     app.config["bot_state"] = bot_state
+    app.config["admin_username"] = admin_username
+    app.config["admin_password"] = admin_password
+
+    def require_admin(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            auth = request.authorization
+            if (
+                not auth
+                or auth.username != app.config["admin_username"]
+                or auth.password != app.config["admin_password"]
+            ):
+                return Response(
+                    "Admin authentication required.",
+                    401,
+                    {"WWW-Authenticate": 'Basic realm="MeshtasticBot Admin"'},
+                )
+            return f(*args, **kwargs)
+        return decorated
 
     @app.route("/")
     def logs():
@@ -79,6 +107,42 @@ def create_app(db_conn, bot_state: dict) -> Flask:
         rows = get_all_nodes(conn, query=q or None) if conn else []
         return render_template("nodes.html", rows=rows, q=q)
 
+    @app.route("/audit")
+    @require_admin
+    def audit():
+        conn = app.config["db_conn"]
+        node_filter = request.args.get("node", "").strip()
+        cmd_filter = request.args.get("cmd", "").strip()
+        rows = get_command_log(conn, node_id=node_filter or None, command=cmd_filter or None) if conn else []
+        banned = get_banned_nodes(conn) if conn else []
+        banned_ids = {r["node_id"] for r in banned}
+        return render_template(
+            "audit.html",
+            rows=rows,
+            banned_ids=banned_ids,
+            node_filter=node_filter,
+            cmd_filter=cmd_filter,
+        )
+
+    @app.route("/audit/ban", methods=["POST"])
+    @require_admin
+    def audit_ban():
+        conn = app.config["db_conn"]
+        node_id = request.form.get("node_id", "").strip()
+        reason = request.form.get("reason", "").strip() or None
+        if node_id and conn:
+            ban_node(conn, node_id, reason=reason)
+        return redirect(url_for("audit"))
+
+    @app.route("/audit/unban", methods=["POST"])
+    @require_admin
+    def audit_unban():
+        conn = app.config["db_conn"]
+        node_id = request.form.get("node_id", "").strip()
+        if node_id and conn:
+            unban_node(conn, node_id)
+        return redirect(url_for("audit"))
+
     @app.route("/api/messages")
     def api_messages():
         conn = app.config["db_conn"]
@@ -113,9 +177,9 @@ def _format_uptime(start_time: datetime | None) -> str:
     return " ".join(parts)
 
 
-def start_web_server(db_conn, bot_state: dict, port: int = 8080):
+def start_web_server(db_conn, bot_state: dict, port: int = 8080, admin_username: str = "", admin_password: str = ""):
     """Start the Flask web server in a background daemon thread."""
-    app = create_app(db_conn, bot_state)
+    app = create_app(db_conn, bot_state, admin_username=admin_username, admin_password=admin_password)
 
     def run():
         log.info(f"Web UI starting on http://0.0.0.0:{port}")

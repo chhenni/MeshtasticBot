@@ -19,7 +19,7 @@ import yaml
 from pubsub import pub
 
 from commands import COMMANDS
-from db import init_db, purge_old_messages, store_message, upsert_node
+from db import init_db, is_banned, log_command, purge_old_messages, store_message, upsert_node
 from dummy import DummyInterface, run_dummy_loop
 from weather import (
     format_alert_message,
@@ -204,16 +204,27 @@ def make_receive_handler(
         if not handler:
             return
 
+        # Check ban before anything else — silently ignore and log
+        if db_conn is not None and is_banned(db_conn, sender):
+            log.info(f"Banned node {sender} attempted {cmd} — ignoring.")
+            log_command(db_conn, sender, cmd, "banned")
+            return
+
         cost = COMMAND_COSTS.get(cmd, 1)
         bucket = _get_tokens(sender)
         if bucket[0] < cost:
             log.info(f"Rate limit: dropping {cmd} from {sender} (need {cost} tokens, have {bucket[0]:.1f})")
+            if db_conn is not None:
+                log_command(db_conn, sender, cmd, "rate_limited")
             if sender not in _warned:
                 _warned.add(sender)
                 reply_fn("⛔ For mange kommandoer på kort tid. Vent litt og prøv igjen.")
             return
         bucket[0] -= cost
         _warned.discard(sender)
+
+        if db_conn is not None:
+            log_command(db_conn, sender, cmd, "ok")
 
         ctx = {
             "interface": interface,
@@ -384,7 +395,12 @@ def main():
     web_cfg = cfg.get("web", {})
     if web_cfg.get("enabled", False):
         web_port = int(web_cfg.get("port", 8080))
-        start_web_server(db_conn, bot_state, port=web_port)
+        admin_cfg = cfg.get("admin", {})
+        start_web_server(
+            db_conn, bot_state, port=web_port,
+            admin_username=str(admin_cfg.get("username", "")),
+            admin_password=str(admin_cfg.get("password", "")),
+        )
 
     if args.dummy:
         run_dummy_loop(handler, channel, log_channel=log_channel)

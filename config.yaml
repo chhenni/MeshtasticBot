@@ -36,6 +36,11 @@ weather:
   # How often to check for new alerts (in seconds). Default: 3600 (1 hour)
   interval_seconds: 3600
 
+# Administrator credentials for protected web pages (/audit, ban management)
+admin:
+  username: admin
+  password: changeme
+
 # Rate limiting — token bucket to prevent spam while allowing short bursts
 # bucket_size: max tokens a sender can accumulate (default: 5)
 # refill_rate: tokens added per second (default: 0.1 = 1 token per 10 seconds)

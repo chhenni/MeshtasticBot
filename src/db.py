@@ -35,6 +35,24 @@ CREATE TABLE IF NOT EXISTS nodes (
 );
 """
 
+CREATE_COMMAND_LOG_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS command_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id     TEXT    NOT NULL,
+    command     TEXT    NOT NULL,
+    status      TEXT    NOT NULL,
+    timestamp   TEXT    NOT NULL
+);
+"""
+
+CREATE_BANNED_NODES_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS banned_nodes (
+    node_id     TEXT    PRIMARY KEY,
+    banned_at   TEXT    NOT NULL,
+    reason      TEXT
+);
+"""
+
 
 def init_db(path: str) -> sqlite3.Connection:
     """Open (or create) the SQLite database at *path* and return the connection.
@@ -50,6 +68,8 @@ def init_db(path: str) -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout=5000")  # ms — retry for up to 5 s on lock contention
     conn.execute(CREATE_TABLE_SQL)
     conn.execute(CREATE_NODES_TABLE_SQL)
+    conn.execute(CREATE_COMMAND_LOG_TABLE_SQL)
+    conn.execute(CREATE_BANNED_NODES_TABLE_SQL)
     conn.commit()
     log.info(f"Message log database opened: {path}")
     return conn
@@ -272,4 +292,101 @@ def get_all_nodes(conn: sqlite3.Connection, query: str | None = None) -> list[di
         return [dict(zip(keys, row)) for row in cur.fetchall()]
     except sqlite3.Error as exc:
         log.error(f"Failed to get all nodes: {exc}")
+        return []
+
+
+def log_command(
+    conn: sqlite3.Connection,
+    node_id: str,
+    command: str,
+    status: str,
+    timestamp: str | None = None,
+) -> None:
+    """Record a command attempt in the audit log."""
+    from datetime import datetime, timezone
+    if timestamp is None:
+        timestamp = datetime.now(timezone.utc).isoformat()
+    try:
+        conn.execute(
+            "INSERT INTO command_log (node_id, command, status, timestamp) VALUES (?, ?, ?, ?)",
+            (node_id, command, status, timestamp),
+        )
+        conn.commit()
+    except sqlite3.Error as exc:
+        log.error(f"Failed to log command (node_id={node_id}, cmd={command}): {exc}")
+
+
+def get_command_log(
+    conn: sqlite3.Connection,
+    node_id: str | None = None,
+    command: str | None = None,
+    limit: int = 200,
+) -> list[dict]:
+    """Return command log entries newest-first. Optionally filter by node_id or command."""
+    keys = ("id", "node_id", "command", "status", "timestamp")
+    conditions, params = [], []
+    if node_id:
+        conditions.append("node_id = ?")
+        params.append(node_id)
+    if command:
+        conditions.append("command = ?")
+        params.append(command)
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    try:
+        cur = conn.execute(
+            f"SELECT id, node_id, command, status, timestamp FROM command_log "
+            f"{where} ORDER BY timestamp DESC LIMIT ?",
+            (*params, limit),
+        )
+        return [dict(zip(keys, row)) for row in cur.fetchall()]
+    except sqlite3.Error as exc:
+        log.error(f"Failed to get command log: {exc}")
+        return []
+
+
+def ban_node(conn: sqlite3.Connection, node_id: str, reason: str | None = None) -> None:
+    """Add node_id to the banned list. Idempotent."""
+    from datetime import datetime, timezone
+    banned_at = datetime.now(timezone.utc).isoformat()
+    try:
+        conn.execute(
+            "INSERT INTO banned_nodes (node_id, banned_at, reason) VALUES (?, ?, ?) "
+            "ON CONFLICT(node_id) DO UPDATE SET banned_at = excluded.banned_at, "
+            "reason = COALESCE(excluded.reason, reason)",
+            (node_id, banned_at, reason),
+        )
+        conn.commit()
+    except sqlite3.Error as exc:
+        log.error(f"Failed to ban node (node_id={node_id}): {exc}")
+
+
+def unban_node(conn: sqlite3.Connection, node_id: str) -> None:
+    """Remove node_id from the banned list. Idempotent."""
+    try:
+        conn.execute("DELETE FROM banned_nodes WHERE node_id = ?", (node_id,))
+        conn.commit()
+    except sqlite3.Error as exc:
+        log.error(f"Failed to unban node (node_id={node_id}): {exc}")
+
+
+def is_banned(conn: sqlite3.Connection, node_id: str) -> bool:
+    """Return True if node_id is in the banned list."""
+    try:
+        cur = conn.execute("SELECT 1 FROM banned_nodes WHERE node_id = ?", (node_id,))
+        return cur.fetchone() is not None
+    except sqlite3.Error as exc:
+        log.error(f"Failed to check ban status (node_id={node_id}): {exc}")
+        return False
+
+
+def get_banned_nodes(conn: sqlite3.Connection) -> list[dict]:
+    """Return all banned nodes ordered by banned_at descending."""
+    keys = ("node_id", "banned_at", "reason")
+    try:
+        cur = conn.execute(
+            "SELECT node_id, banned_at, reason FROM banned_nodes ORDER BY banned_at DESC"
+        )
+        return [dict(zip(keys, row)) for row in cur.fetchall()]
+    except sqlite3.Error as exc:
+        log.error(f"Failed to get banned nodes: {exc}")
         return []

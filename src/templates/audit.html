@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Audit Log – MeshtasticBot{% endblock %}
+{% block content %}
+<h4>Command Audit Log</h4>
+
+{# Banned nodes #}
+{% if banned_ids %}
+<div class="alert alert-danger py-2">
+  <strong>Banned nodes:</strong>
+  {% for node_id in banned_ids %}
+  <span class="badge bg-danger me-1">{{ node_id }}</span>
+  <form method="post" action="/audit/unban" class="d-inline">
+    <input type="hidden" name="node_id" value="{{ node_id }}">
+    <button type="submit" class="btn btn-sm btn-outline-light py-0 me-2">Unban</button>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# Filter form #}
+<form class="row g-2 mb-3" method="get" action="/audit">
+  <div class="col-auto">
+    <input type="text" class="form-control form-control-sm" name="node" placeholder="Node ID" value="{{ node_filter }}">
+  </div>
+  <div class="col-auto">
+    <input type="text" class="form-control form-control-sm" name="cmd" placeholder="Command" value="{{ cmd_filter }}">
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+    <a href="/audit" class="btn btn-sm btn-outline-secondary ms-1">Clear</a>
+  </div>
+</form>
+
+{# Ban a new node #}
+<form method="post" action="/audit/ban" class="row g-2 mb-4">
+  <div class="col-auto">
+    <input type="text" class="form-control form-control-sm" name="node_id" placeholder="Node ID to ban" required>
+  </div>
+  <div class="col-auto">
+    <input type="text" class="form-control form-control-sm" name="reason" placeholder="Reason (optional)">
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-sm btn-danger">Ban Node</button>
+  </div>
+</form>
+
+{# Log table #}
+{% if rows %}
+<table class="table table-sm table-hover">
+  <thead class="table-dark">
+    <tr>
+      <th>Timestamp (UTC)</th>
+      <th>Node ID</th>
+      <th>Command</th>
+      <th>Status</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr class="{{ 'table-danger' if row.status == 'banned' else 'table-warning' if row.status == 'rate_limited' else '' }}">
+      <td>{{ row.timestamp[:19].replace('T', ' ') }}</td>
+      <td><code>{{ row.node_id }}</code></td>
+      <td><code>{{ row.command }}</code></td>
+      <td>
+        {% if row.status == 'ok' %}<span class="badge bg-success">ok</span>
+        {% elif row.status == 'rate_limited' %}<span class="badge bg-warning text-dark">rate_limited</span>
+        {% elif row.status == 'banned' %}<span class="badge bg-danger">banned</span>
+        {% else %}<span class="badge bg-secondary">{{ row.status }}</span>{% endif %}
+      </td>
+      <td>
+        {% if row.node_id not in banned_ids %}
+        <form method="post" action="/audit/ban" class="d-inline">
+          <input type="hidden" name="node_id" value="{{ row.node_id }}">
+          <button type="submit" class="btn btn-sm btn-outline-danger py-0">Ban</button>
+        </form>
+        {% else %}
+        <form method="post" action="/audit/unban" class="d-inline">
+          <input type="hidden" name="node_id" value="{{ row.node_id }}">
+          <button type="submit" class="btn btn-sm btn-outline-secondary py-0">Unban</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="text-muted small">Showing {{ rows|length }} most recent entries.</p>
+{% else %}
+<p class="text-muted">No commands logged yet.</p>
+{% endif %}
+{% endblock %}
