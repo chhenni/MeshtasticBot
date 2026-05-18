@@ -178,6 +178,16 @@ def get_message_counts(conn: sqlite3.Connection) -> dict:
         return {"total": 0, "last_24h": 0, "by_channel": {}}
 
 
+def get_last_message_time(conn: sqlite3.Connection) -> str | None:
+    """Return the received_at timestamp of the most recent message, or None."""
+    try:
+        row = conn.execute("SELECT MAX(received_at) FROM messages").fetchone()
+        return row[0] if row else None
+    except sqlite3.Error as exc:
+        log.error(f"Failed to get last message time: {exc}")
+        return None
+
+
 def purge_old_messages(conn: sqlite3.Connection, days: int = 365) -> int:
     """Delete messages older than *days* days. Returns the number of rows deleted."""
     try:

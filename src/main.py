@@ -121,6 +121,7 @@ def load_config(path: str) -> dict:
 
 def validate_config(cfg: dict) -> None:
     """Raise ValueError with a clear message if required config fields are missing or invalid."""
+    import re
     errors = []
 
     conn = cfg.get("connection", {})
@@ -131,8 +132,36 @@ def validate_config(cfg: dict) -> None:
         errors.append("connection.host is required when connection.type is 'tcp'")
 
     weather_cfg = cfg.get("weather", {})
-    if weather_cfg.get("enabled", True) and not weather_cfg.get("county"):
-        errors.append("weather.county is required when weather.enabled is true")
+    if weather_cfg.get("enabled", True):
+        county = str(weather_cfg.get("county", ""))
+        if not county:
+            errors.append("weather.county is required when weather.enabled is true")
+        elif not re.fullmatch(r"\d{2}", county):
+            errors.append(
+                f"weather.county must be a 2-digit Norwegian fylkesnummer — got '{county}'"
+            )
+
+    msg_log_cfg = cfg.get("message_log", {})
+    if "retain_days" in msg_log_cfg:
+        retain_days = msg_log_cfg["retain_days"]
+        if int(retain_days) <= 0:
+            errors.append(f"message_log.retain_days must be > 0 — got {retain_days}")
+
+    web_cfg = cfg.get("web", {})
+    if "port" in web_cfg:
+        port = int(web_cfg["port"])
+        if not (1 <= port <= 65535):
+            errors.append(f"web.port must be in range 1–65535 — got {port}")
+
+    rl_cfg = cfg.get("rate_limit", {})
+    if "bucket_size" in rl_cfg:
+        bucket_size = float(rl_cfg["bucket_size"])
+        if bucket_size <= 0:
+            errors.append(f"rate_limit.bucket_size must be > 0 — got {bucket_size}")
+    if "refill_rate" in rl_cfg:
+        refill_rate = float(rl_cfg["refill_rate"])
+        if refill_rate <= 0:
+            errors.append(f"rate_limit.refill_rate must be > 0 — got {refill_rate}")
 
     if errors:
         raise ValueError("Invalid config.yaml:\n" + "\n".join(f"  - {e}" for e in errors))
