@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from db import get_command_log, init_db, log_command
+from db import get_command_log, init_db, log_command, upsert_node
 
 
 @pytest.fixture
@@ -141,3 +141,46 @@ class TestGetNodeCommandSummary:
         self._log(conn, "!ddd", "/ping", "ok", "2025-01-10T12:00:00")
         rows = get_node_command_summary(conn)
         assert rows[0]["last_seen"].startswith("2025-01-10T12")
+
+
+class TestNodeNamesInAudit:
+    """Tests that audit functions include long_name/short_name from nodes table."""
+
+    @pytest.fixture
+    def conn(self):
+        c = init_db(":memory:")
+        yield c
+        c.close()
+
+    def _log(self, conn, node_id, command="/ping", status="ok", ts="2025-01-10T10:00:00"):
+        log_command(conn, node_id, command, status, timestamp=ts)
+
+    def test_command_log_includes_node_names(self, conn):
+        from db import get_command_log
+        upsert_node(conn, "!abc", long_name="Alice Node", short_name="ALI", last_seen="2025-01-10")
+        self._log(conn, "!abc")
+        rows = get_command_log(conn)
+        assert rows[0]["long_name"] == "Alice Node"
+        assert rows[0]["short_name"] == "ALI"
+
+    def test_command_log_none_for_unknown_node(self, conn):
+        from db import get_command_log
+        self._log(conn, "!unknown")
+        rows = get_command_log(conn)
+        assert rows[0]["long_name"] is None
+        assert rows[0]["short_name"] is None
+
+    def test_summary_includes_node_names(self, conn):
+        from db import get_node_command_summary
+        upsert_node(conn, "!abc", long_name="Alice Node", short_name="ALI", last_seen="2025-01-10")
+        self._log(conn, "!abc")
+        rows = get_node_command_summary(conn)
+        assert rows[0]["long_name"] == "Alice Node"
+        assert rows[0]["short_name"] == "ALI"
+
+    def test_summary_none_for_unknown_node(self, conn):
+        from db import get_node_command_summary
+        self._log(conn, "!unknown")
+        rows = get_node_command_summary(conn)
+        assert rows[0]["long_name"] is None
+        assert rows[0]["short_name"] is None

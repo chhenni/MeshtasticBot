@@ -330,19 +330,21 @@ def get_command_log(
     limit: int = 200,
 ) -> list[dict]:
     """Return command log entries newest-first. Optionally filter by node_id or command."""
-    keys = ("id", "node_id", "command", "status", "timestamp")
+    keys = ("id", "node_id", "command", "status", "timestamp", "long_name", "short_name")
     conditions, params = [], []
     if node_id:
-        conditions.append("node_id = ?")
+        conditions.append("cl.node_id = ?")
         params.append(node_id)
     if command:
-        conditions.append("command = ?")
+        conditions.append("cl.command = ?")
         params.append(command)
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
     try:
         cur = conn.execute(
-            f"SELECT id, node_id, command, status, timestamp FROM command_log "
-            f"{where} ORDER BY timestamp DESC LIMIT ?",
+            f"SELECT cl.id, cl.node_id, cl.command, cl.status, cl.timestamp, "
+            f"n.long_name, n.short_name "
+            f"FROM command_log cl LEFT JOIN nodes n ON cl.node_id = n.node_id "
+            f"{where} ORDER BY cl.timestamp DESC LIMIT ?",
             (*params, limit),
         )
         return [dict(zip(keys, row)) for row in cur.fetchall()]
@@ -400,23 +402,25 @@ def get_banned_nodes(conn: sqlite3.Connection) -> list[dict]:
 
 
 def get_node_command_summary(conn: sqlite3.Connection) -> list[dict]:
-    """Return per-node command stats: total, today, week, rate_limited, last_seen.
+    """Return per-node command stats: total, today, week, rate_limited, last_seen, long_name, short_name.
 
     Sorted by total commands descending.
     """
-    keys = ("node_id", "total", "today", "week", "rate_limited", "last_seen")
+    keys = ("node_id", "total", "today", "week", "rate_limited", "last_seen", "long_name", "short_name")
     try:
         cur = conn.execute(
             """
             SELECT
-                node_id,
-                COUNT(*)                                                         AS total,
-                COUNT(CASE WHEN timestamp >= datetime('now', '-1 day')  THEN 1 END) AS today,
-                COUNT(CASE WHEN timestamp >= datetime('now', '-7 days') THEN 1 END) AS week,
-                COUNT(CASE WHEN status = 'rate_limited'                 THEN 1 END) AS rate_limited,
-                MAX(timestamp)                                                   AS last_seen
-            FROM command_log
-            GROUP BY node_id
+                cl.node_id,
+                COUNT(*)                                                              AS total,
+                COUNT(CASE WHEN cl.timestamp >= datetime('now', '-1 day')  THEN 1 END) AS today,
+                COUNT(CASE WHEN cl.timestamp >= datetime('now', '-7 days') THEN 1 END) AS week,
+                COUNT(CASE WHEN cl.status = 'rate_limited'                 THEN 1 END) AS rate_limited,
+                MAX(cl.timestamp)                                                     AS last_seen,
+                n.long_name,
+                n.short_name
+            FROM command_log cl LEFT JOIN nodes n ON cl.node_id = n.node_id
+            GROUP BY cl.node_id
             ORDER BY total DESC
             """
         )
