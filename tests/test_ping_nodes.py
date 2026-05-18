@@ -120,3 +120,21 @@ class TestNodesCommand:
         handle_nodes_command("/nodes", replies.append, ctx(nodes))
         for r in replies:
             assert len(r.encode("utf-8")) <= MAX_BYTES
+
+
+class TestHelpMessageSizes:
+    """Regression test: all HELP_MESSAGES must fit within MAX_BYTES."""
+
+    def test_all_help_messages_fit_in_max_bytes(self):
+        from commands import HELP_MESSAGES
+        from constants import MAX_BYTES
+
+        oversized = [
+            (i + 1, len(msg.encode("utf-8")))
+            for i, msg in enumerate(HELP_MESSAGES)
+            if len(msg.encode("utf-8")) > MAX_BYTES
+        ]
+        assert oversized == [], (
+            f"Help message(s) exceed {MAX_BYTES} bytes: "
+            + ", ".join(f"msg {i}={size}B" for i, size in oversized)
+        )

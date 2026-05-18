@@ -47,25 +47,27 @@ log = logging.getLogger(__name__)
 
 
 HELP_MESSAGES = [
-    "Kommandoer [1/3]:\n"
+    "Kommandoer [1/4]:\n"
     "/help - Vis hjelp\n"
     "/ping - Status og oppetid\n"
     "/nodes - Vis noder på meshet\n"
     "/weather - 7-dagers varsel (GPS)\n"
     "/24hour|/24h - 24t timevarsel (GPS)",
 
-    "Kommandoer [2/3]:\n"
+    "Kommandoer [2/4]:\n"
     "/radio - HF/VHF båndkondisjon\n"
     "/alert - Sjekk aktive værvarsler nå\n"
     "/whois <id/navn> - Slå opp en node\n"
     "/bandplan <bånd> - Vis båndplan\n"
-    "/bandplan_check <freq> - Sjekk frekvens\n"
+    "/bandplan_check <freq> - Sjekk frekvens",
+
+    "Kommandoer [3/4]:\n"
     "/calling <bånd> - Anropsfrekvenser\n"
     "/mvhf [kanal] - Marin VHF kanaler\n"
     "/krslog [t] - Meldingslogg (std: 24t, maks: 168t)\n"
     "/krslast [n] - Siste n meldinger (std: 10, maks: 100)",
 
-    "Info [3/3]:\n"
+    "Info [4/4]:\n"
     "- Kommandoer funker via DM\n"
     "- GPS må deles for værvarsler\n"
     "- Lynnvarsler og vindvarsler sendes automatisk",
