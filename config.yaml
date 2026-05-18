@@ -36,5 +36,11 @@ weather:
   # How often to check for new alerts (in seconds). Default: 3600 (1 hour)
   interval_seconds: 3600
 
-# Rate limiting — ignore repeated commands from the same sender within this window
-rate_limit_seconds: 10
+# Rate limiting — token bucket to prevent spam while allowing short bursts
+# bucket_size: max tokens a sender can accumulate (default: 5)
+# refill_rate: tokens added per second (default: 0.1 = 1 token per 10 seconds)
+# Command costs: /ping /help /whois = 1,  /nodes /radio /alert /calling /mvhf = 2,
+#                /weather /24hour /bandplan /krslog /krslast = 3
+rate_limit:
+  bucket_size: 5
+  refill_rate: 0.1

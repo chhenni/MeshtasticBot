@@ -32,6 +32,25 @@ from web import start_web_server
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
 
+# Token cost per command — higher cost = more messages generated = fewer bursts allowed.
+COMMAND_COSTS: dict[str, int] = {
+    "/ping":           1,
+    "/help":           1,
+    "/whois":          1,
+    "/nodes":          2,
+    "/radio":          2,
+    "/alert":          2,
+    "/calling":        2,
+    "/mvhf":           2,
+    "/weather":        3,
+    "/24hour":         3,
+    "/24h":            3,
+    "/bandplan":       3,
+    "/bandplan_check": 3,
+    "/krslog":         3,
+    "/krslast":        3,
+}
+
 CONFIG_FILE = "config.yaml"
 
 
@@ -88,9 +107,22 @@ def make_receive_handler(
     db_conn=None,
     log_channel: int | None = None,
     bot_state: dict | None = None,
-    rate_limit_seconds: int = 10,
+    rate_limit_seconds: int = 10,  # kept for backwards compat; ignored when bucket params set
+    bucket_size: float = 5.0,
+    refill_rate: float = 0.1,  # tokens per second (default: 1 token / 10 s)
 ):
-    _last_command: dict[str, float] = {}  # sender → timestamp of last command
+    # Token bucket state: sender → (tokens, last_refill_timestamp)
+    _buckets: dict[str, list] = {}  # list used for mutability: [tokens, last_refill]
+
+    def _get_tokens(sender: str) -> list:
+        if sender not in _buckets:
+            _buckets[sender] = [bucket_size, time.time()]
+        bucket = _buckets[sender]
+        now = time.time()
+        elapsed = now - bucket[1]
+        bucket[0] = min(bucket_size, bucket[0] + elapsed * refill_rate)
+        bucket[1] = now
+        return bucket
 
     def on_receive(packet, interface=interface):
         decoded = packet.get("decoded", {})
@@ -152,13 +184,12 @@ def make_receive_handler(
         if not handler:
             return
 
-        now = time.time()
-        last = _last_command.get(sender, 0)
-        if now - last < rate_limit_seconds:
-            remaining = int(rate_limit_seconds - (now - last))
-            log.info(f"Rate limit: ignoring {cmd} from {sender} ({remaining}s remaining)")
+        cost = COMMAND_COSTS.get(cmd, 1)
+        bucket = _get_tokens(sender)
+        if bucket[0] < cost:
+            log.info(f"Rate limit: dropping {cmd} from {sender} (need {cost} tokens, have {bucket[0]:.1f})")
             return
-        _last_command[sender] = now
+        bucket[0] -= cost
 
         ctx = {
             "interface": interface,
@@ -306,13 +337,16 @@ def main():
         "last_message": None,
     }
 
-    rate_limit_seconds = int(cfg.get("rate_limit_seconds", 10))
+    rl_cfg = cfg.get("rate_limit", {})
+    bucket_size = float(rl_cfg.get("bucket_size", 5.0))
+    refill_rate = float(rl_cfg.get("refill_rate", 0.1))  # tokens/second
     handler = make_receive_handler(
         interface, channel,
         db_conn=db_conn,
         log_channel=log_channel,
         bot_state=bot_state,
-        rate_limit_seconds=rate_limit_seconds,
+        bucket_size=bucket_size,
+        refill_rate=refill_rate,
     )
 
     if weather_cfg.get("enabled", True):
