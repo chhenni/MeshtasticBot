@@ -37,5 +37,5 @@
 - **Web UI enhancements** — live updates via SSE/WebSocket, map view of node positions using Leaflet.js
 - **Keyset pagination** — replace `OFFSET`-based paging in `db.py` with cursor-based keyset pagination for performance on large message tables
 - **Structured logging** — JSON log output (e.g. via `structlog`) for easier ops monitoring and log aggregation
-- **Dependency audit in CI** — add `pip-audit` step to `.github/workflows/ci.yml` to catch known vulnerabilities in dependencies
+- ✅ **Dependency audit in CI** — `pip-audit` step in `.github/workflows/ci.yml` checks `requirements.txt` for known CVEs on every push/PR
 - **Config reload on SIGHUP** — reload `config.yaml` without restarting the bot, useful for changing county or rate limits in production
