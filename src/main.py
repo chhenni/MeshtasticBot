@@ -315,6 +315,7 @@ def make_receive_handler(
         if db_conn is not None and is_banned(db_conn, sender):
             log.info(f"Banned node {sender} attempted {cmd} — ignoring.")
             log_command(db_conn, sender, cmd, "banned")
+            push_event("audit_update", {"node_id": sender, "command": cmd, "status": "banned"})
             return
 
         cost = COMMAND_COSTS.get(cmd, 1)
@@ -323,6 +324,7 @@ def make_receive_handler(
             log.info(f"Rate limit: dropping {cmd} from {sender} (need {cost} tokens, have {bucket[0]:.1f})")
             if db_conn is not None:
                 log_command(db_conn, sender, cmd, "rate_limited")
+                push_event("audit_update", {"node_id": sender, "command": cmd, "status": "rate_limited"})
             if sender not in _warned:
                 _warned.add(sender)
                 reply_fn("⛔ For mange kommandoer på kort tid. Vent litt og prøv igjen.")
@@ -332,6 +334,7 @@ def make_receive_handler(
 
         if db_conn is not None:
             log_command(db_conn, sender, cmd, "ok")
+            push_event("audit_update", {"node_id": sender, "command": cmd, "status": "ok"})
 
         ctx: BotContext = {
             "interface": interface,

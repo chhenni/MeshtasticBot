@@ -42,6 +42,11 @@
   es.addEventListener('heartbeat', () => setStatus('live', 'bg-success'));
   es.onerror = () => setStatus('disconnected', 'bg-danger');
 
+  // ── Audit page: prepend new command row ──
+  es.addEventListener('audit_update', function (e) {
+    window.dispatchEvent(new CustomEvent('sse:audit_update', { detail: JSON.parse(e.data) }));
+  });
+
   // ── Logs page: prepend new message row ──
   es.addEventListener('message', function (e) {
     const tbody = document.getElementById('message-tbody');

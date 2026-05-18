@@ -135,7 +135,7 @@
       <th>Action</th>
     </tr>
   </thead>
-  <tbody>
+  <tbody id="audit-log-tbody">
     {% for row in rows %}
     <tr class="{{ 'table-danger' if row.status == 'banned' else 'table-warning' if row.status == 'rate_limited' else '' }}">
       <td>{{ row.timestamp[:19].replace('T', ' ') }}</td>
@@ -178,6 +178,51 @@
 </table>
 <p class="text-muted small">Showing {{ rows|length }} entries.</p>
 {% else %}
-<p class="text-muted">No commands logged yet.</p>
+<p class="text-muted" id="audit-log-empty">No commands logged yet.</p>
 {% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const statusBadge = {
+    ok:           '<span class="badge bg-success">ok</span>',
+    rate_limited: '<span class="badge bg-warning text-dark">rate_limited</span>',
+    banned:       '<span class="badge bg-danger">banned</span>',
+  };
+  const rowClass = {
+    banned:       'table-danger',
+    rate_limited: 'table-warning',
+  };
+
+  window.addEventListener('sse:audit_update', function (e) {
+    const d = e.detail;
+    const tbody = document.getElementById('audit-log-tbody');
+
+    // If the page loaded with "no commands yet", swap in the table
+    const empty = document.getElementById('audit-log-empty');
+    if (empty) empty.remove();
+
+    if (!tbody) return;
+
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const badge = statusBadge[d.status] || `<span class="badge bg-secondary">${d.status}</span>`;
+    const cls = rowClass[d.status] || '';
+
+    const tr = document.createElement('tr');
+    if (cls) tr.className = cls;
+    tr.style.animation = 'fadeIn 0.4s';
+    tr.innerHTML = `
+      <td>${now}</td>
+      <td><a href="/audit?node=${d.node_id}" class="text-decoration-none"><code>${d.node_id}</code></a></td>
+      <td><code>${d.command}</code></td>
+      <td>${badge}</td>
+      <td>
+        <form method="post" action="/audit/ban" class="d-inline">
+          <input type="hidden" name="node_id" value="${d.node_id}">
+          <button type="submit" class="btn btn-sm btn-outline-danger py-0">Ban</button>
+        </form>
+      </td>`;
+    tbody.prepend(tr);
+  });
+});
+</script>
 {% endblock %}
