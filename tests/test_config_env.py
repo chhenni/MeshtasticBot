@@ -46,22 +46,22 @@ class TestLoadConfigEnvOverrides:
 
     def test_no_env_vars_returns_yaml_values(self, tmp_path, monkeypatch):
         path = _write_yaml(tmp_path, _MINIMAL_YAML)
-        monkeypatch.delenv("MESHTASTIC_CHANNEL", raising=False)
+        monkeypatch.delenv("MESHTASTIC__CHANNEL", raising=False)
         from main import load_config
         cfg = load_config(path)
         assert cfg["channel"] == 1
 
     def test_override_int(self, tmp_path, monkeypatch):
         path = _write_yaml(tmp_path, _MINIMAL_YAML)
-        monkeypatch.setenv("MESHTASTIC_CHANNEL", "7")
+        monkeypatch.setenv("MESHTASTIC__CHANNEL", "7")
         from main import load_config
         cfg = load_config(path)
         assert cfg["channel"] == 7
 
     def test_override_nested_string(self, tmp_path, monkeypatch):
         path = _write_yaml(tmp_path, _MINIMAL_YAML)
-        monkeypatch.setenv("MESHTASTIC_CONNECTION_TYPE", "tcp")
-        monkeypatch.setenv("MESHTASTIC_CONNECTION_HOST", "192.168.1.50")
+        monkeypatch.setenv("MESHTASTIC__CONNECTION__TYPE", "tcp")
+        monkeypatch.setenv("MESHTASTIC__CONNECTION__HOST", "192.168.1.50")
         from main import load_config
         cfg = load_config(path)
         assert cfg["connection"]["type"] == "tcp"
@@ -70,7 +70,7 @@ class TestLoadConfigEnvOverrides:
     def test_override_bool_true_values(self, tmp_path, monkeypatch):
         path = _write_yaml(tmp_path, _MINIMAL_YAML)
         for truthy in ("1", "true", "True", "yes", "on"):
-            monkeypatch.setenv("MESHTASTIC_WEB_ENABLED", truthy)
+            monkeypatch.setenv("MESHTASTIC__WEB__ENABLED", truthy)
             from main import load_config
             cfg = load_config(path)
             assert cfg["web"]["enabled"] is True, f"Expected True for {truthy!r}"
@@ -78,15 +78,15 @@ class TestLoadConfigEnvOverrides:
     def test_override_bool_false_values(self, tmp_path, monkeypatch):
         path = _write_yaml(tmp_path, _MINIMAL_YAML)
         for falsy in ("0", "false", "no", "off", "False"):
-            monkeypatch.setenv("MESHTASTIC_WEB_ENABLED", falsy)
+            monkeypatch.setenv("MESHTASTIC__WEB__ENABLED", falsy)
             from main import load_config
             cfg = load_config(path)
             assert cfg["web"]["enabled"] is False, f"Expected False for {falsy!r}"
 
     def test_override_float(self, tmp_path, monkeypatch):
         path = _write_yaml(tmp_path, _MINIMAL_YAML)
-        monkeypatch.setenv("MESHTASTIC_RATE_LIMIT_BUCKET_SIZE", "10")
-        monkeypatch.setenv("MESHTASTIC_RATE_LIMIT_REFILL_RATE", "0.5")
+        monkeypatch.setenv("MESHTASTIC__RATE_LIMIT__BUCKET_SIZE", "10")
+        monkeypatch.setenv("MESHTASTIC__RATE_LIMIT__REFILL_RATE", "0.5")
         from main import load_config
         cfg = load_config(path)
         assert cfg["rate_limit"]["bucket_size"] == 10.0
@@ -94,8 +94,8 @@ class TestLoadConfigEnvOverrides:
 
     def test_override_admin_credentials(self, tmp_path, monkeypatch):
         path = _write_yaml(tmp_path, _MINIMAL_YAML)
-        monkeypatch.setenv("MESHTASTIC_ADMIN_USERNAME", "ops")
-        monkeypatch.setenv("MESHTASTIC_ADMIN_PASSWORD", "s3cr3t")
+        monkeypatch.setenv("MESHTASTIC__ADMIN__USERNAME", "ops")
+        monkeypatch.setenv("MESHTASTIC__ADMIN__PASSWORD", "s3cr3t")
         from main import load_config
         cfg = load_config(path)
         assert cfg["admin"]["username"] == "ops"
@@ -103,14 +103,14 @@ class TestLoadConfigEnvOverrides:
 
     def test_override_db_path(self, tmp_path, monkeypatch):
         path = _write_yaml(tmp_path, _MINIMAL_YAML)
-        monkeypatch.setenv("MESHTASTIC_MESSAGE_LOG_DB_PATH", "/data/prod.db")
+        monkeypatch.setenv("MESHTASTIC__MESSAGE_LOG__DB_PATH", "/data/prod.db")
         from main import load_config
         cfg = load_config(path)
         assert cfg["message_log"]["db_path"] == "/data/prod.db"
 
     def test_override_web_port(self, tmp_path, monkeypatch):
         path = _write_yaml(tmp_path, _MINIMAL_YAML)
-        monkeypatch.setenv("MESHTASTIC_WEB_PORT", "9090")
+        monkeypatch.setenv("MESHTASTIC__WEB__PORT", "9090")
         from main import load_config
         cfg = load_config(path)
         assert cfg["web"]["port"] == 9090
@@ -118,7 +118,7 @@ class TestLoadConfigEnvOverrides:
     def test_invalid_int_env_var_is_ignored(self, tmp_path, monkeypatch):
         """A bad value should be skipped with a warning, not crash."""
         path = _write_yaml(tmp_path, _MINIMAL_YAML)
-        monkeypatch.setenv("MESHTASTIC_CHANNEL", "not_a_number")
+        monkeypatch.setenv("MESHTASTIC__CHANNEL", "not_a_number")
         from main import load_config
         cfg = load_config(path)
         assert cfg["channel"] == 1  # YAML value unchanged
@@ -127,7 +127,7 @@ class TestLoadConfigEnvOverrides:
         """Env var for a key not in YAML should create the nested dict."""
         yaml_content = "channel: 1\nconnection:\n  type: serial\n"
         path = _write_yaml(tmp_path, yaml_content)
-        monkeypatch.setenv("MESHTASTIC_ADMIN_PASSWORD", "fromenv")
+        monkeypatch.setenv("MESHTASTIC__ADMIN__PASSWORD", "fromenv")
         from main import load_config
         cfg = load_config(path)
         assert cfg["admin"]["password"] == "fromenv"

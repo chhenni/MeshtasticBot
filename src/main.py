@@ -53,41 +53,28 @@ COMMAND_COSTS: dict[str, int] = {
 }
 
 CONFIG_FILE = "config.yaml"
-
-# Explicit mapping of environment variable → (dot-path into config dict, type coercion).
-# All vars use the MESHTASTIC_ prefix.  Type may be str, int, float, or bool.
-_ENV_MAP: list[tuple[str, str, type]] = [
-    ("MESHTASTIC_CHANNEL",                      "channel",                        int),
-    ("MESHTASTIC_CONNECTION_TYPE",              "connection.type",                str),
-    ("MESHTASTIC_CONNECTION_PORT",              "connection.port",                str),
-    ("MESHTASTIC_CONNECTION_HOST",              "connection.host",                str),
-    ("MESHTASTIC_CONNECTION_ADDRESS",           "connection.address",             str),
-    ("MESHTASTIC_MESSAGE_LOG_ENABLED",          "message_log.enabled",            bool),
-    ("MESHTASTIC_MESSAGE_LOG_CHANNEL",          "message_log.channel",            int),
-    ("MESHTASTIC_MESSAGE_LOG_DB_PATH",          "message_log.db_path",            str),
-    ("MESHTASTIC_MESSAGE_LOG_RETAIN_DAYS",      "message_log.retain_days",        int),
-    ("MESHTASTIC_WEB_ENABLED",                  "web.enabled",                    bool),
-    ("MESHTASTIC_WEB_PORT",                     "web.port",                       int),
-    ("MESHTASTIC_WEATHER_ENABLED",              "weather.enabled",                bool),
-    ("MESHTASTIC_WEATHER_COUNTY",               "weather.county",                 int),
-    ("MESHTASTIC_WEATHER_INTERVAL_SECONDS",     "weather.interval_seconds",       int),
-    ("MESHTASTIC_ADMIN_USERNAME",               "admin.username",                 str),
-    ("MESHTASTIC_ADMIN_PASSWORD",               "admin.password",                 str),
-    ("MESHTASTIC_RATE_LIMIT_BUCKET_SIZE",       "rate_limit.bucket_size",         float),
-    ("MESHTASTIC_RATE_LIMIT_REFILL_RATE",       "rate_limit.refill_rate",         float),
-]
+_ENV_PREFIX = "MESHTASTIC__"
 
 
-def _set_nested(cfg: dict, path: str, value) -> None:
-    """Set a nested key in *cfg* given a dot-separated *path*."""
-    keys = path.split(".")
+def _set_nested(cfg: dict, keys: list[str], value) -> None:
+    """Set a deeply nested key in *cfg* given a list of *keys*."""
     for key in keys[:-1]:
         cfg = cfg.setdefault(key, {})
     cfg[keys[-1]] = value
 
 
+def _get_nested(cfg: dict, keys: list[str]):
+    """Return the existing value at *keys* path, or None if not found."""
+    node = cfg
+    for key in keys:
+        if not isinstance(node, dict):
+            return None
+        node = node.get(key)
+    return node
+
+
 def _coerce(raw: str, kind: type):
-    """Convert *raw* string to the required *kind*."""
+    """Convert *raw* string to *kind*. Booleans accept 1/true/yes/on."""
     if kind is bool:
         return raw.lower() in ("1", "true", "yes", "on")
     return kind(raw)
@@ -96,14 +83,17 @@ def _coerce(raw: str, kind: type):
 def load_config(path: str) -> dict:
     with open(path) as f:
         cfg = yaml.safe_load(f) or {}
-    for env_var, cfg_path, kind in _ENV_MAP:
-        raw = os.environ.get(env_var)
-        if raw is not None:
-            try:
-                _set_nested(cfg, cfg_path, _coerce(raw, kind))
-                log.info(f"Config override from env: {env_var}")
-            except (ValueError, TypeError) as exc:
-                log.warning(f"Ignoring invalid env var {env_var}={raw!r}: {exc}")
+    for env_var, raw in os.environ.items():
+        if not env_var.startswith(_ENV_PREFIX):
+            continue
+        keys = env_var[len(_ENV_PREFIX):].lower().split("__")
+        existing = _get_nested(cfg, keys)
+        kind = type(existing) if existing is not None else str
+        try:
+            _set_nested(cfg, keys, _coerce(raw, kind))
+            log.info(f"Config override from env: {env_var}")
+        except (ValueError, TypeError) as exc:
+            log.warning(f"Ignoring invalid env var {env_var}={raw!r}: {exc}")
     return cfg
 
 
