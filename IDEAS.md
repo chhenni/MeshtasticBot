@@ -12,7 +12,6 @@
 
 - **`/tide <location>`** — Norwegian tide tables from `api.sehavniva.no` (free Norwegian government API, same pattern as yr.no)
 - ✅ **`/alert`** — on-demand weather alert check, not just the background loop
-- **`/krssearch <term>`** — search the log DB by keyword
 - **Per-command rate limiting** — currently rate limiting is per-sender globally; extend to key on `(sender, command)` so e.g. `/weather` can have its own cooldown independent of `/ping`
 - ✅ **Burst-tolerant rate limiting** — token bucket with command-cost weighting. Bucket size 5, refill 1 token/10s. /ping /help /whois cost 1, /nodes /radio /alert /calling /mvhf cost 2, /weather /24hour /bandplan /krslog /krslast cost 3.
 - **Web UI authentication** — simple IP whitelist or API key to protect the message log from open network access
