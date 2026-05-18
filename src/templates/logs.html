@@ -39,7 +39,7 @@
         <th>Message</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="message-tbody">
       {% for r in rows %}
       <tr>
         <td class="text-nowrap text-muted small">{{ r.received_at[:19].replace('T', ' ') }}</td>

@@ -30,7 +30,7 @@ from weather import (
     get_lightning_alerts,
     get_wind_alerts,
 )
-from web import start_web_server
+from web import push_event, start_web_server
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -272,19 +272,36 @@ def make_receive_handler(
                     "text": text,
                     "received_at": received_at,
                 }
+            push_event("message", {
+                "channel": store_channel,
+                "sender_id": sender,
+                "text": text,
+                "received_at": received_at,
+            })
 
             node_info = (interface.nodes or {}).get(sender, {})
+            node_data = {
+                "node_id": sender,
+                "long_name": node_info.get("user", {}).get("longName"),
+                "short_name": node_info.get("user", {}).get("shortName"),
+                "last_seen": received_at,
+                "last_snr": packet.get("rxSnr"),
+                "last_rssi": packet.get("rxRssi"),
+                "lat": node_info.get("position", {}).get("latitude"),
+                "lon": node_info.get("position", {}).get("longitude"),
+            }
             upsert_node(
                 db_conn,
-                node_id=sender,
-                long_name=node_info.get("user", {}).get("longName"),
-                short_name=node_info.get("user", {}).get("shortName"),
-                last_seen=received_at,
-                snr=packet.get("rxSnr"),
-                rssi=packet.get("rxRssi"),
-                lat=node_info.get("position", {}).get("latitude"),
-                lon=node_info.get("position", {}).get("longitude"),
+                node_id=node_data["node_id"],
+                long_name=node_data["long_name"],
+                short_name=node_data["short_name"],
+                last_seen=node_data["last_seen"],
+                snr=node_data["last_snr"],
+                rssi=node_data["last_rssi"],
+                lat=node_data["lat"],
+                lon=node_data["lon"],
             )
+            push_event("node_update", node_data)
 
         if reply_fn is None:
             return

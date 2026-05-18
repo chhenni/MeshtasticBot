@@ -4,8 +4,10 @@ Web UI for MeshtasticBot — read-only log viewer and status dashboard.
 Started as a daemon thread from main.py when web.enabled is true in config.yaml.
 """
 
+import json
 import logging
 import math
+import queue
 import threading
 from datetime import datetime, timezone
 from functools import wraps
@@ -27,6 +29,25 @@ from db import (
 log = logging.getLogger(__name__)
 
 PAGE_SIZE = 50
+
+# ── SSE fan-out ──────────────────────────────────────────────────────────────
+_sse_lock = threading.Lock()
+_sse_clients: list[queue.SimpleQueue] = []
+
+
+def push_event(event_type: str, data: dict) -> None:
+    """Push a server-sent event to all connected SSE clients."""
+    payload = json.dumps(data, default=str)
+    frame = f"event: {event_type}\ndata: {payload}\n\n"
+    with _sse_lock:
+        dead = []
+        for q in _sse_clients:
+            try:
+                q.put_nowait(frame)
+            except Exception:
+                dead.append(q)
+        for q in dead:
+            _sse_clients.remove(q)
 
 
 def create_app(db_conn, bot_state: dict, admin_username: str = "", admin_password: str = "") -> Flask:
@@ -181,6 +202,43 @@ def create_app(db_conn, bot_state: dict, admin_username: str = "", admin_passwor
             "last_message_at": get_last_message_time(conn),
             "db_size_bytes": db_size,
         })
+
+    @app.route("/api/nodes")
+    def api_nodes():
+        conn = app.config["db_conn"]
+        nodes = get_all_nodes(conn) if conn else []
+        return jsonify({"nodes": nodes})
+
+    @app.route("/api/events")
+    def sse():
+        def stream():
+            client_q: queue.SimpleQueue = queue.SimpleQueue()
+            with _sse_lock:
+                _sse_clients.append(client_q)
+            try:
+                yield "event: heartbeat\ndata: {}\n\n"
+                while True:
+                    try:
+                        msg = client_q.get(timeout=25)
+                        yield msg
+                    except queue.Empty:
+                        yield "event: heartbeat\ndata: {}\n\n"
+            finally:
+                with _sse_lock:
+                    try:
+                        _sse_clients.remove(client_q)
+                    except ValueError:
+                        pass
+
+        return Response(
+            stream(),
+            mimetype="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    @app.route("/map")
+    def map_view():
+        return render_template("map.html")
 
     return app
 
