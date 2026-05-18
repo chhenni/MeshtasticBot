@@ -44,7 +44,17 @@
       <tr>
         <td class="text-nowrap text-muted small">{{ r.received_at[:19].replace('T', ' ') }}</td>
         <td>{{ r.channel }}</td>
-        <td class="font-monospace small">{{ r.sender_id }}</td>
+        <td class="font-monospace small">
+          {% if r.long_name %}
+            {{ r.long_name }}
+            <span class="text-muted small d-block">{{ r.sender_id }}</span>
+          {% elif r.short_name %}
+            {{ r.short_name }}
+            <span class="text-muted small d-block">{{ r.sender_id }}</span>
+          {% else %}
+            {{ r.sender_id }}
+          {% endif %}
+        </td>
         <td>{{ r.text }}</td>
       </tr>
       {% endfor %}

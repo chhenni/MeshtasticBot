@@ -117,3 +117,39 @@ class TestDatabaseSettings:
         row = conn.execute("PRAGMA journal_mode").fetchone()
         assert row[0] in ("wal", "memory")
 
+
+
+class TestGetMessagesPageNodeNames:
+    """get_messages_page should include long_name and short_name from the nodes table."""
+
+    @pytest.fixture
+    def conn(self):
+        c = init_db(":memory:")
+        yield c
+        c.close()
+
+    def test_node_name_included_when_known(self, conn):
+        from db import get_messages_page, upsert_node
+
+        upsert_node(conn, "!abc", long_name="Alice Node", short_name="ALI", last_seen="2026-01-01T00:00:00")
+        store_message(conn, "p1", 1, "!abc", "hello", "2026-01-01T10:00:00")
+        rows, _ = get_messages_page(conn, channel=1, date_from=None, date_to=None, page=1)
+        assert rows[0]["long_name"] == "Alice Node"
+        assert rows[0]["short_name"] == "ALI"
+
+    def test_node_name_none_when_unknown(self, conn):
+        from db import get_messages_page
+
+        store_message(conn, "p1", 1, "!unknown", "hello", "2026-01-01T10:00:00")
+        rows, _ = get_messages_page(conn, channel=1, date_from=None, date_to=None, page=1)
+        assert rows[0]["long_name"] is None
+        assert rows[0]["short_name"] is None
+
+    def test_node_with_no_names_set(self, conn):
+        from db import get_messages_page, upsert_node
+
+        upsert_node(conn, "!xyz", long_name=None, short_name=None, last_seen="2026-01-01T00:00:00")
+        store_message(conn, "p1", 1, "!xyz", "hello", "2026-01-01T10:00:00")
+        rows, _ = get_messages_page(conn, channel=1, date_from=None, date_to=None, page=1)
+        assert rows[0]["long_name"] is None
+        assert rows[0]["short_name"] is None
