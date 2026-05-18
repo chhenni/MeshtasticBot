@@ -17,6 +17,7 @@ from db import (
     get_all_nodes,
     get_banned_nodes,
     get_command_log,
+    get_last_message_time,
     get_message_counts,
     get_messages_page,
     get_node_command_summary,
@@ -160,6 +161,26 @@ def create_app(db_conn, bot_state: dict, admin_username: str = "", admin_passwor
         channel = int(channel_raw) if channel_raw.lstrip("-").isdigit() else None
         rows, total = get_messages_page(conn, channel, date_from or None, date_to or None, page, PAGE_SIZE)
         return jsonify({"total": total, "page": page, "page_size": PAGE_SIZE, "messages": rows})
+
+    @app.route("/health")
+    def health():
+        conn = app.config["db_conn"]
+        state = app.config["bot_state"]
+        start_time = state.get("start_time")
+        uptime = (
+            int((datetime.now(tz=timezone.utc) - start_time).total_seconds())
+            if start_time
+            else None
+        )
+        db_size = conn.execute(
+            "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()"
+        ).fetchone()[0]
+        return jsonify({
+            "connected": bool(state.get("connected", False)),
+            "uptime_seconds": uptime,
+            "last_message_at": get_last_message_time(conn),
+            "db_size_bytes": db_size,
+        })
 
     return app
 
