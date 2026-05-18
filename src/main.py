@@ -8,6 +8,7 @@ Configuration is loaded from config.yaml. See config.yaml for available options.
 import argparse
 import logging
 import os
+import signal
 import threading
 import time
 from datetime import datetime, timezone
@@ -277,8 +278,21 @@ def make_receive_handler(
     return on_receive
 
 
-def weather_alert_loop(interface, channel: int, county: str, interval_seconds: int):
+def _make_signal_handler(shutdown_event: threading.Event):
+    """Return a signal handler that sets *shutdown_event*."""
+    def handler(signum, frame):
+        log.info(f"Signal {signum} received — shutting down.")
+        shutdown_event.set()
+    return handler
+
+
+def weather_alert_loop(
+    interface, channel: int, county: str, interval_seconds: int,
+    shutdown_event: threading.Event | None = None,
+):
     """Background thread: checks for lightning and wind alerts and broadcasts new ones."""
+    if shutdown_event is None:
+        shutdown_event = threading.Event()
     sent_lightning_ids: set[str] = set()
     sent_wind_ids: set[str] = set()
 
@@ -303,18 +317,21 @@ def weather_alert_loop(interface, channel: int, county: str, interval_seconds: i
 
     log.info(f"Weather alert task started (county={county}, interval={interval_seconds}s).")
     check_and_send()
-    while True:
-        time.sleep(interval_seconds)
+    while not shutdown_event.wait(timeout=interval_seconds):
         check_and_send()
 
 
-def db_purge_loop(conn, retain_days: int = 365):
+def db_purge_loop(
+    conn, retain_days: int = 365,
+    shutdown_event: threading.Event | None = None,
+    interval_seconds: int = 86400,
+):
     """Background thread: purges messages older than *retain_days* once per day."""
-    PURGE_INTERVAL = 86400  # 24 hours
-    log.info(f"DB purge task started (retain={retain_days} days, interval=24h).")
+    if shutdown_event is None:
+        shutdown_event = threading.Event()
+    log.info(f"DB purge task started (retain={retain_days} days, interval={interval_seconds}s).")
     purge_old_messages(conn, retain_days)
-    while True:
-        time.sleep(PURGE_INTERVAL)
+    while not shutdown_event.wait(timeout=interval_seconds):
         purge_old_messages(conn, retain_days)
 
 
@@ -341,11 +358,16 @@ def sync_nodes_from_interface(interface, db_conn) -> int:
     return len(nodes)
 
 
-def node_sync_loop(interface, db_conn, interval_seconds: int = 300):
+def node_sync_loop(
+    interface, db_conn,
+    shutdown_event: threading.Event | None = None,
+    interval_seconds: int = 300,
+):
     """Background thread: periodically syncs interface.nodes → DB."""
+    if shutdown_event is None:
+        shutdown_event = threading.Event()
     log.info(f"Node sync task started (interval={interval_seconds}s).")
-    while True:
-        time.sleep(interval_seconds)
+    while not shutdown_event.wait(timeout=interval_seconds):
         try:
             n = sync_nodes_from_interface(interface, db_conn)
             log.debug(f"Node sync: {n} nodes upserted.")
@@ -371,6 +393,10 @@ def main():
     if args.channel is not None:
         channel = args.channel
 
+    shutdown_event = threading.Event()
+    signal.signal(signal.SIGTERM, _make_signal_handler(shutdown_event))
+    signal.signal(signal.SIGINT, _make_signal_handler(shutdown_event))
+
     if args.dummy:
         interface = DummyInterface()
         log.info("Dummy mode active — no device connection.")
@@ -380,24 +406,25 @@ def main():
     msg_log_cfg = cfg.get("message_log", {})
     db_conn = None
     log_channel = None
+    background_threads = []
     if msg_log_cfg.get("enabled", False):
         log_channel = int(msg_log_cfg.get("channel", 1))
         db_path = msg_log_cfg.get("db_path", "messages.db")
         retain_days = int(msg_log_cfg.get("retain_days", 365))
         db_conn = init_db(db_path)
-        threading.Thread(
+        background_threads.append(threading.Thread(
             target=db_purge_loop,
-            args=(db_conn, retain_days),
+            args=(db_conn, retain_days, shutdown_event),
             daemon=True,
-        ).start()
+        ))
         # Populate the node registry from what the interface already knows.
         n = sync_nodes_from_interface(interface, db_conn)
         log.info(f"Initial node sync: {n} nodes loaded into registry.")
-        threading.Thread(
+        background_threads.append(threading.Thread(
             target=node_sync_loop,
-            args=(interface, db_conn),
+            args=(interface, db_conn, shutdown_event),
             daemon=True,
-        ).start()
+        ))
 
     weather_cfg = cfg.get("weather", {})
     county = str(weather_cfg.get("county", "")) if weather_cfg.get("enabled", True) else ""
@@ -424,11 +451,14 @@ def main():
 
     if weather_cfg.get("enabled", True):
         interval = weather_cfg.get("interval_seconds", 3600)
-        threading.Thread(
+        background_threads.append(threading.Thread(
             target=weather_alert_loop,
-            args=(interface, channel, county, interval),
+            args=(interface, channel, county, interval, shutdown_event),
             daemon=True,
-        ).start()
+        ))
+
+    for t in background_threads:
+        t.start()
 
     web_cfg = cfg.get("web", {})
     if web_cfg.get("enabled", False):
@@ -447,8 +477,8 @@ def main():
         pub.subscribe(handler, "meshtastic.receive.text")
         log.info(f"Bot ready — listening on channel {channel}. Press Ctrl+C to stop.")
         try:
-            while True:
-                time.sleep(1)
+            while not shutdown_event.is_set():
+                shutdown_event.wait(timeout=1)
                 # Reconnect if the interface has lost connection
                 if getattr(interface, "isConnected", None) is not None and not interface.isConnected:
                     log.warning("Device disconnected — reconnecting…")
@@ -463,10 +493,13 @@ def main():
                     interface = connect_with_retry(cfg)
                     pub.subscribe(handler, "meshtastic.receive.text")
                     log.info("Reconnected successfully.")
-        except KeyboardInterrupt:
-            log.info("Shutting down.")
         finally:
+            log.info("Shutting down — waiting for background tasks to finish…")
+            shutdown_event.set()
+            for t in background_threads:
+                t.join(timeout=5)
             interface.close()
+            log.info("Shutdown complete.")
 
 
 if __name__ == "__main__":
