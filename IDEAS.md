@@ -7,6 +7,7 @@
 - ✅ **Rate limiting** — ignore repeated commands from the same sender within N seconds to prevent spam
 - ✅ **Config validation** — fail fast at startup with a clear error if `config.yaml` is missing required fields
 - ✅ **GitHub Actions CI** — run the test suite automatically on push
+- ✅ **Environment variable config overrides** — any `MESHTASTIC__SECTION__KEY` env var overlays `config.yaml` at startup; type is inferred from the YAML value so no hardcoded mapping is needed
 
 ## Medium effort
 
@@ -18,8 +19,8 @@
 - **Config validation improvements** — add checks for `retain_days > 0`, port range 1–65535, county as 2-digit string, `rate_limit_seconds >= 0`
 - **`/health` endpoint** — `GET /health` returns JSON with uptime, last message timestamp, DB size — useful for external monitoring
 - **Web route tests** — `tests/test_web.py` with Flask `test_client()` covering `/`, `/status`, `/nodes`, `/api/messages`
-- **Command audit log** — persist a log of every bot command (node ID, command, timestamp, whether it was rate-limited) to a dedicated `command_log` table in SQLite. Add a `/audit` web page showing the log with filters by node and command, so you can see who is using the bot and how often.
-- **User ban system** — persist a `banned_nodes` table in SQLite. Banned nodes are silently ignored (no reply). Management via the web UI: ban/unban buttons on the `/nodes` and `/audit` pages. Bans survive bot restarts. Consider whether the ban page needs authentication.
+- ✅ **Command audit log** — persists every bot command (node ID, command, timestamp, status: ok/rate_limited/banned) to `command_log` in SQLite. `/audit` web page with filters and ban/unban buttons, protected by HTTP Basic Auth.
+- ✅ **User ban system** — `banned_nodes` table in SQLite. Banned nodes are silently ignored before the token bucket check. Managed via the `/audit` web page (admin credentials required).
 
 ## Reliability & correctness
 
