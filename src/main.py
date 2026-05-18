@@ -34,6 +34,27 @@ from web import start_web_server
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
 
+
+def send_text_with_retry(interface, text: str, max_attempts: int = 5, base_delay: float = 0.5, **kwargs) -> None:
+    """Send *text* via *interface*, retrying up to *max_attempts* times on MeshInterfaceError.
+
+    Uses exponential backoff starting at *base_delay* seconds.
+    All extra *kwargs* are forwarded to interface.sendText().
+    """
+    from meshtastic.mesh_interface import MeshInterface
+    delay = base_delay
+    for attempt in range(1, max_attempts + 1):
+        try:
+            interface.sendText(text, **kwargs)
+            return
+        except MeshInterface.MeshInterfaceError as exc:
+            if attempt == max_attempts:
+                log.error(f"sendText failed after {max_attempts} attempts: {exc}")
+                return
+            log.warning(f"sendText attempt {attempt}/{max_attempts} failed ({exc}) — retrying in {delay:.1f}s")
+            time.sleep(delay)
+            delay *= 2
+
 # Token cost per command — higher cost = more messages generated = fewer bursts allowed.
 COMMAND_COSTS: dict[str, int] = {
     "/ping":           1,
@@ -198,12 +219,12 @@ def make_receive_handler(
             log.info(f"[DM from {sender}]: {text}")
             def reply_fn(msg, _to=sender):
                 log.info(f"[DM to {_to}]: {msg}")
-                interface.sendText(msg, destinationId=_to, channelIndex=0)
+                send_text_with_retry(interface, msg, destinationId=_to, channelIndex=0)
         elif pkt_channel == channel:
             log.info(f"[ch{channel} from {sender}]: {text}")
             def reply_fn(msg, _ch=channel, _to=sender):
                 log.info(f"[ch{_ch} to {_to}]: {msg}")
-                interface.sendText(msg, channelIndex=_ch)
+                send_text_with_retry(interface, msg, channelIndex=_ch)
         else:
             reply_fn = None
 
@@ -302,7 +323,7 @@ def weather_alert_loop(
             if alert["id"] not in sent_lightning_ids:
                 msg = format_alert_message(alert)
                 log.info(f"Sending lightning alert to ch{channel}: {msg}")
-                interface.sendText(msg, channelIndex=channel)
+                send_text_with_retry(interface, msg, channelIndex=channel)
                 sent_lightning_ids.add(alert["id"])
         sent_lightning_ids.intersection_update({a["id"] for a in lightning_alerts})
 
@@ -311,7 +332,7 @@ def weather_alert_loop(
             if alert["id"] not in sent_wind_ids:
                 msg = format_wind_alert_message(alert)
                 log.info(f"Sending wind alert to ch{channel}: {msg}")
-                interface.sendText(msg, channelIndex=channel)
+                send_text_with_retry(interface, msg, channelIndex=channel)
                 sent_wind_ids.add(alert["id"])
         sent_wind_ids.intersection_update({a["id"] for a in wind_alerts})
 
