@@ -267,7 +267,7 @@ def start_web_server(db_conn, bot_state: dict, port: int = 8080, admin_username:
         log.info(f"Web UI starting on http://0.0.0.0:{port}")
         # Use werkzeug directly to suppress the dev-server warning
         from werkzeug.serving import make_server
-        srv = make_server("0.0.0.0", port, app)
+        srv = make_server("0.0.0.0", port, app, threaded=True)
         srv.serve_forever()
 
     t = threading.Thread(target=run, daemon=True, name="web-ui")
