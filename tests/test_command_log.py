@@ -67,3 +67,77 @@ class TestLogCommand:
 
     def test_empty_log_returns_empty_list(self, conn):
         assert get_command_log(conn) == []
+
+
+class TestGetNodeCommandSummary:
+    """Tests for get_node_command_summary() — per-node aggregated stats."""
+
+    @pytest.fixture
+    def conn(self):
+        c = init_db(":memory:")
+        yield c
+        c.close()
+
+    def _log(self, conn, node_id, command, status, timestamp):
+        from db import log_command
+        log_command(conn, node_id, command, status, timestamp=timestamp)
+
+    def test_empty_returns_empty_list(self, conn):
+        from db import get_node_command_summary
+        assert get_node_command_summary(conn) == []
+
+    def test_single_node_totals(self, conn):
+        from db import get_node_command_summary
+        self._log(conn, "!aaa", "/ping", "ok", "2025-01-10T10:00:00")
+        self._log(conn, "!aaa", "/weather", "ok", "2025-01-10T11:00:00")
+        rows = get_node_command_summary(conn)
+        assert len(rows) == 1
+        assert rows[0]["node_id"] == "!aaa"
+        assert rows[0]["total"] == 2
+
+    def test_rate_limited_count(self, conn):
+        from db import get_node_command_summary
+        self._log(conn, "!bbb", "/ping", "ok", "2025-01-10T10:00:00")
+        self._log(conn, "!bbb", "/weather", "rate_limited", "2025-01-10T10:01:00")
+        self._log(conn, "!bbb", "/weather", "rate_limited", "2025-01-10T10:02:00")
+        rows = get_node_command_summary(conn)
+        assert rows[0]["rate_limited"] == 2
+
+    def test_today_and_week_counts(self, conn):
+        from datetime import datetime, timedelta, timezone
+
+        from db import get_node_command_summary
+        now = datetime.now(timezone.utc)
+        today = now.isoformat()
+        three_days_ago = (now - timedelta(days=3)).isoformat()
+        ten_days_ago = (now - timedelta(days=10)).isoformat()
+        self._log(conn, "!ccc", "/ping", "ok", today)
+        self._log(conn, "!ccc", "/ping", "ok", three_days_ago)
+        self._log(conn, "!ccc", "/ping", "ok", ten_days_ago)
+        rows = get_node_command_summary(conn)
+        assert rows[0]["total"] == 3
+        assert rows[0]["today"] == 1
+        assert rows[0]["week"] == 2
+
+    def test_sorted_by_total_descending(self, conn):
+        from db import get_node_command_summary
+        for _ in range(3):
+            self._log(conn, "!heavy", "/ping", "ok", "2025-01-10T10:00:00")
+        self._log(conn, "!light", "/ping", "ok", "2025-01-10T10:00:00")
+        rows = get_node_command_summary(conn)
+        assert rows[0]["node_id"] == "!heavy"
+
+    def test_multiple_nodes_all_appear(self, conn):
+        from db import get_node_command_summary
+        self._log(conn, "!n1", "/ping", "ok", "2025-01-10T10:00:00")
+        self._log(conn, "!n2", "/ping", "ok", "2025-01-10T10:00:00")
+        self._log(conn, "!n3", "/ping", "ok", "2025-01-10T10:00:00")
+        rows = get_node_command_summary(conn)
+        assert len(rows) == 3
+
+    def test_last_seen_is_most_recent(self, conn):
+        from db import get_node_command_summary
+        self._log(conn, "!ddd", "/ping", "ok", "2025-01-10T08:00:00")
+        self._log(conn, "!ddd", "/ping", "ok", "2025-01-10T12:00:00")
+        rows = get_node_command_summary(conn)
+        assert rows[0]["last_seen"].startswith("2025-01-10T12")

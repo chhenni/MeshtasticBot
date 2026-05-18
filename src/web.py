@@ -19,6 +19,7 @@ from db import (
     get_command_log,
     get_message_counts,
     get_messages_page,
+    get_node_command_summary,
     unban_node,
 )
 
@@ -116,12 +117,14 @@ def create_app(db_conn, bot_state: dict, admin_username: str = "", admin_passwor
         rows = get_command_log(conn, node_id=node_filter or None, command=cmd_filter or None) if conn else []
         banned = get_banned_nodes(conn) if conn else []
         banned_ids = {r["node_id"] for r in banned}
+        summary = get_node_command_summary(conn) if conn else []
         return render_template(
             "audit.html",
             rows=rows,
             banned_ids=banned_ids,
             node_filter=node_filter,
             cmd_filter=cmd_filter,
+            summary=summary,
         )
 
     @app.route("/audit/ban", methods=["POST"])

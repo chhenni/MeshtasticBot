@@ -390,3 +390,30 @@ def get_banned_nodes(conn: sqlite3.Connection) -> list[dict]:
     except sqlite3.Error as exc:
         log.error(f"Failed to get banned nodes: {exc}")
         return []
+
+
+def get_node_command_summary(conn: sqlite3.Connection) -> list[dict]:
+    """Return per-node command stats: total, today, week, rate_limited, last_seen.
+
+    Sorted by total commands descending.
+    """
+    keys = ("node_id", "total", "today", "week", "rate_limited", "last_seen")
+    try:
+        cur = conn.execute(
+            """
+            SELECT
+                node_id,
+                COUNT(*)                                                         AS total,
+                COUNT(CASE WHEN timestamp >= datetime('now', '-1 day')  THEN 1 END) AS today,
+                COUNT(CASE WHEN timestamp >= datetime('now', '-7 days') THEN 1 END) AS week,
+                COUNT(CASE WHEN status = 'rate_limited'                 THEN 1 END) AS rate_limited,
+                MAX(timestamp)                                                   AS last_seen
+            FROM command_log
+            GROUP BY node_id
+            ORDER BY total DESC
+            """
+        )
+        return [dict(zip(keys, row)) for row in cur.fetchall()]
+    except sqlite3.Error as exc:
+        log.error(f"Failed to get node command summary: {exc}")
+        return []

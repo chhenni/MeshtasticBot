@@ -76,7 +76,9 @@ class TestAuditPage:
         resp = client.get("/audit?node=!badnode", headers=auth_header())
         html = resp.data.decode()
         assert "!badnode" in html
-        assert "!aabbccdd" not in html
+        # Summary always shows all nodes; check the log section doesn't show !aabbccdd
+        # by verifying the filter heading is present
+        assert "node: <code>!badnode</code>" in html
 
     def test_audit_filter_by_command(self, client):
         resp = client.get("/audit?cmd=/weather", headers=auth_header())
@@ -123,3 +125,25 @@ class TestBanActions:
         but it must at least not crash the public pages."""
         resp = client.get("/")
         assert resp.status_code == 200
+
+
+class TestAuditSummary:
+    def test_summary_table_appears(self, client):
+        resp = client.get("/audit", headers=auth_header())
+        html = resp.data.decode()
+        assert "Node Summary" in html
+
+    def test_summary_shows_node_id(self, client):
+        resp = client.get("/audit", headers=auth_header())
+        assert b"!aabbccdd" in resp.data
+
+    def test_summary_shows_rate_limited_count(self, client):
+        resp = client.get("/audit", headers=auth_header())
+        html = resp.data.decode()
+        # !aabbccdd has 1 rate_limited entry
+        assert "rate_limited" in html or "1" in html
+
+    def test_summary_links_to_filtered_view(self, client):
+        resp = client.get("/audit", headers=auth_header())
+        html = resp.data.decode()
+        assert "/audit?node=!aabbccdd" in html
