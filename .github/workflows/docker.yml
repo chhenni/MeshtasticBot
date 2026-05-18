@@ -45,10 +45,10 @@ jobs:
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             MAJOR="${{ steps.gitversion.outputs.major }}"
             MINOR="${{ steps.gitversion.outputs.minor }}"
-            TAGS="${TAGS},${IMAGE}:${MAJOR}.${MINOR},${IMAGE}:${MAJOR},${IMAGE}:latest"
+            TAGS="${TAGS},${IMAGE}:${MAJOR}.${MINOR},${IMAGE}:${MAJOR}"
 
           elif [[ "${{ github.ref_name }}" == "main" ]]; then
-            TAGS="${TAGS},${IMAGE}:main"
+            TAGS="${TAGS},${IMAGE}:main,${IMAGE}:latest"
 
           elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
             TAGS="${TAGS},${IMAGE}:pr-${{ github.event.number }}"
