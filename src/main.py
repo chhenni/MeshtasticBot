@@ -7,6 +7,7 @@ Configuration is loaded from config.yaml. See config.yaml for available options.
 
 import argparse
 import logging
+import os
 import threading
 import time
 from datetime import datetime, timezone
@@ -53,10 +54,57 @@ COMMAND_COSTS: dict[str, int] = {
 
 CONFIG_FILE = "config.yaml"
 
+# Explicit mapping of environment variable → (dot-path into config dict, type coercion).
+# All vars use the MESHTASTIC_ prefix.  Type may be str, int, float, or bool.
+_ENV_MAP: list[tuple[str, str, type]] = [
+    ("MESHTASTIC_CHANNEL",                      "channel",                        int),
+    ("MESHTASTIC_CONNECTION_TYPE",              "connection.type",                str),
+    ("MESHTASTIC_CONNECTION_PORT",              "connection.port",                str),
+    ("MESHTASTIC_CONNECTION_HOST",              "connection.host",                str),
+    ("MESHTASTIC_CONNECTION_ADDRESS",           "connection.address",             str),
+    ("MESHTASTIC_MESSAGE_LOG_ENABLED",          "message_log.enabled",            bool),
+    ("MESHTASTIC_MESSAGE_LOG_CHANNEL",          "message_log.channel",            int),
+    ("MESHTASTIC_MESSAGE_LOG_DB_PATH",          "message_log.db_path",            str),
+    ("MESHTASTIC_MESSAGE_LOG_RETAIN_DAYS",      "message_log.retain_days",        int),
+    ("MESHTASTIC_WEB_ENABLED",                  "web.enabled",                    bool),
+    ("MESHTASTIC_WEB_PORT",                     "web.port",                       int),
+    ("MESHTASTIC_WEATHER_ENABLED",              "weather.enabled",                bool),
+    ("MESHTASTIC_WEATHER_COUNTY",               "weather.county",                 int),
+    ("MESHTASTIC_WEATHER_INTERVAL_SECONDS",     "weather.interval_seconds",       int),
+    ("MESHTASTIC_ADMIN_USERNAME",               "admin.username",                 str),
+    ("MESHTASTIC_ADMIN_PASSWORD",               "admin.password",                 str),
+    ("MESHTASTIC_RATE_LIMIT_BUCKET_SIZE",       "rate_limit.bucket_size",         float),
+    ("MESHTASTIC_RATE_LIMIT_REFILL_RATE",       "rate_limit.refill_rate",         float),
+]
+
+
+def _set_nested(cfg: dict, path: str, value) -> None:
+    """Set a nested key in *cfg* given a dot-separated *path*."""
+    keys = path.split(".")
+    for key in keys[:-1]:
+        cfg = cfg.setdefault(key, {})
+    cfg[keys[-1]] = value
+
+
+def _coerce(raw: str, kind: type):
+    """Convert *raw* string to the required *kind*."""
+    if kind is bool:
+        return raw.lower() in ("1", "true", "yes", "on")
+    return kind(raw)
+
 
 def load_config(path: str) -> dict:
     with open(path) as f:
-        return yaml.safe_load(f)
+        cfg = yaml.safe_load(f) or {}
+    for env_var, cfg_path, kind in _ENV_MAP:
+        raw = os.environ.get(env_var)
+        if raw is not None:
+            try:
+                _set_nested(cfg, cfg_path, _coerce(raw, kind))
+                log.info(f"Config override from env: {env_var}")
+            except (ValueError, TypeError) as exc:
+                log.warning(f"Ignoring invalid env var {env_var}={raw!r}: {exc}")
+    return cfg
 
 
 def validate_config(cfg: dict) -> None:
