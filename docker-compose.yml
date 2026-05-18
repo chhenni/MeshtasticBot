@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   meshtasticbot:
-    build: .
+    image: ghcr.io/chhenni/meshtasticbot:latest
     restart: unless-stopped
     ports:
       - "8082:8080"

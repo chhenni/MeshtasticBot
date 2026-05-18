@@ -1,0 +1,32 @@
+mode: ContinuousDelivery
+tagPrefix: v
+
+branches:
+  main:
+    regex: ^main$
+    label: ""
+    increment: Patch
+    prevent-increment:
+      of-merged-branch: true
+
+  feature:
+    regex: ^features?[/-]
+    label: alpha
+    increment: Inherit
+
+  pull-request:
+    regex: ^(pull|pull\-requests|pr)[/-]
+    label: pr
+    increment: Inherit
+
+  hotfix:
+    regex: ^hotfix(es)?[/-]
+    label: beta
+    increment: Patch
+
+  support:
+    regex: ^support[/-]
+    increment: Patch
+
+ignore:
+  sha: []
