@@ -8,9 +8,12 @@
 </div>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 <div id="map" style="height: 600px; border-radius: 0.375rem;"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
 const map = L.map('map').setView([65.0, 14.0], 5);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -18,17 +21,26 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
 }).addTo(map);
 
+const clusterGroup = L.markerClusterGroup({
+  // Show individual SNR colours even inside a cluster spiderfy
+  spiderfyOnMaxZoom: true,
+  showCoverageOnHover: false,
+  zoomToBoundsOnClick: true,
+  maxClusterRadius: 60,
+});
+map.addLayer(clusterGroup);
+
 const markers = {};
 
-function snrClass(snr) {
-  if (snr === null) return '#6c757d';
+function snrColor(snr) {
+  if (snr === null || snr === undefined) return '#6c757d';
   if (snr >= 5)  return '#198754';
   if (snr >= 0)  return '#ffc107';
   return '#dc3545';
 }
 
 function nodeIcon(snr) {
-  const color = snrClass(snr);
+  const color = snrColor(snr);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">
     <circle cx="11" cy="11" r="9" fill="${color}" stroke="white" stroke-width="2"/>
   </svg>`;
@@ -43,8 +55,8 @@ function nodeIcon(snr) {
 function popupHtml(n) {
   const name = n.long_name || n.short_name || n.node_id;
   const seen = n.last_seen ? n.last_seen.slice(0, 19).replace('T', ' ') + ' UTC' : '—';
-  const snr  = n.last_snr  !== null ? n.last_snr.toFixed(1) + ' dB' : '—';
-  const rssi = n.last_rssi !== null ? n.last_rssi + ' dBm' : '—';
+  const snr  = n.last_snr  != null ? n.last_snr.toFixed(1) + ' dB' : '—';
+  const rssi = n.last_rssi != null ? n.last_rssi + ' dBm' : '—';
   return `<strong>${name}</strong><br>
     <code class="small">${n.node_id}</code><br>
     SNR: ${snr} &nbsp; RSSI: ${rssi}<br>
@@ -55,19 +67,22 @@ function refreshNodes() {
   fetch('/api/nodes')
     .then(r => r.json())
     .then(data => {
-      const withPos = data.nodes.filter(n => n.lat !== null && n.lon !== null);
+      const withPos = data.nodes.filter(n => n.lat != null && n.lon != null);
       document.getElementById('map-node-count').textContent =
         `${withPos.length} node${withPos.length !== 1 ? 's' : ''} on map`;
 
       withPos.forEach(n => {
         if (markers[n.node_id]) {
-          markers[n.node_id].setLatLng([n.lat, n.lon])
+          // Update existing marker in-place (keeps cluster membership)
+          markers[n.node_id]
+            .setLatLng([n.lat, n.lon])
             .setIcon(nodeIcon(n.last_snr))
             .setPopupContent(popupHtml(n));
         } else {
-          markers[n.node_id] = L.marker([n.lat, n.lon], {icon: nodeIcon(n.last_snr)})
-            .bindPopup(popupHtml(n))
-            .addTo(map);
+          const m = L.marker([n.lat, n.lon], { icon: nodeIcon(n.last_snr) })
+            .bindPopup(popupHtml(n));
+          markers[n.node_id] = m;
+          clusterGroup.addLayer(m);
         }
       });
     });
