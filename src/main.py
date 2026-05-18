@@ -101,6 +101,24 @@ def connect(cfg: dict):
     raise ValueError(f"Unknown connection type: {kind!r}")
 
 
+def connect_with_retry(cfg: dict, base_delay: float = 5.0, max_delay: float = 300.0):
+    """Attempt to connect, retrying with exponential backoff on failure.
+
+    Retries indefinitely — the bot should always reconnect rather than die.
+    base_delay: initial wait in seconds before first retry.
+    max_delay: upper cap on wait between retries.
+    """
+    attempt = 0
+    while True:
+        try:
+            return connect(cfg)
+        except Exception as exc:
+            delay = min(base_delay * (2 ** attempt), max_delay)
+            log.error(f"Connection failed (attempt {attempt + 1}): {exc}. Retrying in {delay:.0f}s…")
+            time.sleep(delay)
+            attempt += 1
+
+
 def make_receive_handler(
     interface,
     channel: int,
@@ -308,7 +326,7 @@ def main():
         interface = DummyInterface()
         log.info("Dummy mode active — no device connection.")
     else:
-        interface = connect(cfg)
+        interface = connect_with_retry(cfg)
 
     msg_log_cfg = cfg.get("message_log", {})
     db_conn = None
@@ -377,6 +395,20 @@ def main():
         try:
             while True:
                 time.sleep(1)
+                # Reconnect if the interface has lost connection
+                if getattr(interface, "isConnected", None) is not None and not interface.isConnected:
+                    log.warning("Device disconnected — reconnecting…")
+                    try:
+                        pub.unsubscribe(handler, "meshtastic.receive.text")
+                    except Exception:
+                        pass
+                    try:
+                        interface.close()
+                    except Exception:
+                        pass
+                    interface = connect_with_retry(cfg)
+                    pub.subscribe(handler, "meshtastic.receive.text")
+                    log.info("Reconnected successfully.")
         except KeyboardInterrupt:
             log.info("Shutting down.")
         finally:
