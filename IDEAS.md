@@ -19,7 +19,7 @@
 - **Config validation improvements** — add checks for `retain_days > 0`, port range 1–65535, county as 2-digit string, `rate_limit_seconds >= 0`
 - **`/health` endpoint** — `GET /health` returns JSON with uptime, last message timestamp, DB size — useful for external monitoring
 - **Web route tests** — `tests/test_web.py` with Flask `test_client()` covering `/`, `/status`, `/nodes`, `/api/messages`
-- **Main integration test** — `tests/test_main.py` covering full startup → config → handler dispatch flow
+- **Command audit log** — persist a log of every bot command (node ID, command, timestamp, whether it was rate-limited) to a dedicated `command_log` table in SQLite. Add a `/audit` web page showing the log with filters by node and command, so you can see who is using the bot and how often.
 
 ## Reliability & correctness
 
