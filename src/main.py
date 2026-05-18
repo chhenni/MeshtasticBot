@@ -337,6 +337,46 @@ def _make_signal_handler(shutdown_event: threading.Event):
     return handler
 
 
+def _make_sighup_handler(config_path: str, bot_state: dict):
+    """Return a SIGHUP handler that reloads config and updates *bot_state* in-place.
+
+    Updates: county, bucket_size, refill_rate, admin_username, admin_password.
+    If the reloaded config fails validation the existing values are preserved.
+    """
+    def handler(signum, frame):
+        log.info("SIGHUP received — reloading config…")
+        try:
+            cfg = load_config(config_path)
+            validate_config(cfg)
+        except FileNotFoundError:
+            log.error(f"Config reload failed: file not found: {config_path}")
+            return
+        except ValueError as exc:
+            log.error(f"Config reload aborted — invalid config: {exc}")
+            return
+        except Exception as exc:
+            log.error(f"Config reload failed: {exc}")
+            return
+
+        weather_cfg = cfg.get("weather", {})
+        bot_state["county"] = (
+            str(weather_cfg.get("county", ""))
+            if weather_cfg.get("enabled", True)
+            else ""
+        )
+        rl_cfg = cfg.get("rate_limit", {})
+        bot_state["bucket_size"] = float(rl_cfg.get("bucket_size", bot_state.get("bucket_size", 5.0)))
+        bot_state["refill_rate"] = float(rl_cfg.get("refill_rate", bot_state.get("refill_rate", 0.1)))
+        admin_cfg = cfg.get("admin", {})
+        bot_state["admin_username"] = str(admin_cfg.get("username", ""))
+        bot_state["admin_password"] = str(admin_cfg.get("password", ""))
+        log.info(
+            f"Config reloaded — county={bot_state['county']!r}, "
+            f"bucket_size={bot_state['bucket_size']}, refill_rate={bot_state['refill_rate']}"
+        )
+    return handler
+
+
 def weather_alert_loop(
     interface, channel: int, county: str, interval_seconds: int,
     shutdown_event: threading.Event | None = None,
@@ -480,15 +520,22 @@ def main():
     weather_cfg = cfg.get("weather", {})
     county = str(weather_cfg.get("county", "")) if weather_cfg.get("enabled", True) else ""
 
+    rl_cfg = cfg.get("rate_limit", {})
     bot_state: dict = {
         "start_time": datetime.now(timezone.utc),
         "channel": channel,
         "log_channel": log_channel,
         "county": county,
         "last_message": None,
+        "bucket_size": float(rl_cfg.get("bucket_size", 5.0)),
+        "refill_rate": float(rl_cfg.get("refill_rate", 0.1)),
+        "admin_username": str(cfg.get("admin", {}).get("username", "")),
+        "admin_password": str(cfg.get("admin", {}).get("password", "")),
+        "connected": not args.dummy,
     }
 
-    rl_cfg = cfg.get("rate_limit", {})
+    signal.signal(signal.SIGHUP, _make_sighup_handler(CONFIG_FILE, bot_state))
+
     bucket_size = float(rl_cfg.get("bucket_size", 5.0))
     refill_rate = float(rl_cfg.get("refill_rate", 0.1))  # tokens/second
     handler = make_receive_handler(
