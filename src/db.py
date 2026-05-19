@@ -312,19 +312,19 @@ def lookup_nodes_by_name(conn: sqlite3.Connection, query: str) -> list[dict]:
 
 def get_all_nodes(conn: sqlite3.Connection, query: str | None = None) -> list[dict]:
     """Return all nodes sorted by last_seen descending. Optionally filter by *query*."""
-    keys = ("node_id", "long_name", "short_name", "last_seen", "last_snr", "last_rssi", "lat", "lon")
+    keys = ("node_id", "long_name", "short_name", "last_seen", "last_snr", "last_rssi", "lat", "lon", "public_key")
     try:
         if query:
             pattern = f"%{query}%"
             cur = conn.execute(
-                "SELECT node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon "
+                "SELECT node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon, public_key "
                 "FROM nodes WHERE node_id LIKE ? OR long_name LIKE ? OR short_name LIKE ? "
                 "ORDER BY last_seen DESC",
                 (pattern, pattern, pattern),
             )
         else:
             cur = conn.execute(
-                "SELECT node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon "
+                "SELECT node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon, public_key "
                 "FROM nodes ORDER BY last_seen DESC"
             )
         return [dict(zip(keys, row)) for row in cur.fetchall()]
