@@ -23,7 +23,14 @@ from bandplan import (
 )
 from constants import MAX_KRSLAST, MAX_KRSLOG_HOURS, PACK_BYTES
 from context import BotContext
-from db import get_last_messages, get_node, get_recent_messages, lookup_nodes_by_name
+from db import (
+    add_privileged_node,
+    get_last_messages,
+    get_node,
+    get_recent_messages,
+    lookup_nodes_by_name,
+    remove_privileged_node,
+)
 from marine import format_mvhf_channel, format_mvhf_list_messages
 from radio import format_radio_messages, get_radio_forecast
 from weather import (
@@ -65,8 +72,12 @@ HELP_MESSAGES = [
     "Info [4/4]:\n"
     "- Kommandoer funker via DM\n"
     "- GPS må deles for værvarsler\n"
-    "- Lynnvarsler og vindvarsler sendes automatisk",
+    "- Lynnvarsler og vindvarsler sendes automatisk\n"
+    "- /addpriv og /removepriv krever privilegert node",
 ]
+
+# Commands that require the sender to be in the privileged_nodes list
+PRIVILEGED_COMMANDS: frozenset[str] = frozenset({"/addpriv", "/removepriv"})
 
 
 # ---------------------------------------------------------------------------
@@ -390,6 +401,44 @@ def handle_krslast_command(text: str, reply_fn, ctx: BotContext) -> None:
 # To add a new command: implement a handler above, add it here. That's it.
 # ---------------------------------------------------------------------------
 
+def handle_addpriv_command(text: str, reply_fn, ctx: BotContext) -> None:
+    """Add a node to the privileged list. Usage: /addpriv <node_id>"""
+    db_conn = ctx.get("db_conn")
+    sender = ctx.get("sender", "unknown")
+    parts = text.split()
+    if len(parts) < 2:
+        reply_fn("Bruk: /addpriv <node_id>")
+        return
+    target = parts[1]
+    if db_conn is None:
+        reply_fn("❌ Ingen database tilgjengelig.")
+        return
+    # Look up the target's current public key from nodes table
+    node = get_node(db_conn, target)
+    pub_key = node.get("public_key") if node else None
+    add_privileged_node(db_conn, target, added_by=sender, public_key=pub_key)
+    name = (node.get("long_name") or node.get("short_name") or target) if node else target
+    key_note = " (nøkkel lagret)" if pub_key else " (ingen nøkkel)"
+    reply_fn(f"✅ {name} lagt til som privilegert node{key_note}.")
+
+
+def handle_removepriv_command(text: str, reply_fn, ctx: BotContext) -> None:
+    """Remove a node from the privileged list. Usage: /removepriv <node_id>"""
+    db_conn = ctx.get("db_conn")
+    parts = text.split()
+    if len(parts) < 2:
+        reply_fn("Bruk: /removepriv <node_id>")
+        return
+    target = parts[1]
+    if db_conn is None:
+        reply_fn("❌ Ingen database tilgjengelig.")
+        return
+    node = get_node(db_conn, target)
+    remove_privileged_node(db_conn, target)
+    name = (node.get("long_name") or node.get("short_name") or target) if node else target
+    reply_fn(f"✅ {name} fjernet fra privilegerte noder.")
+
+
 COMMANDS: dict[str, callable] = {
     "/ping":           handle_ping_command,
     "/nodes":          handle_nodes_command,
@@ -406,4 +455,6 @@ COMMANDS: dict[str, callable] = {
     "/bandplan_check": handle_bandplan_check_command,
     "/calling":        handle_calling_command,
     "/bandplan":       handle_bandplan_command,
+    "/addpriv":        handle_addpriv_command,
+    "/removepriv":     handle_removepriv_command,
 }
