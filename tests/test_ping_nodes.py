@@ -123,18 +123,21 @@ class TestNodesCommand:
 
 
 class TestHelpMessageSizes:
-    """Regression test: all HELP_MESSAGES must fit within MAX_BYTES."""
+    """Regression test: all help pages must fit within MAX_BYTES."""
 
-    def test_all_help_messages_fit_in_max_bytes(self):
-        from commands import HELP_MESSAGES
+    def test_all_help_pages_fit_in_max_bytes(self):
+        from commands import build_help_pages
         from constants import MAX_BYTES
 
-        oversized = [
-            (i + 1, len(msg.encode("utf-8")))
-            for i, msg in enumerate(HELP_MESSAGES)
-            if len(msg.encode("utf-8")) > MAX_BYTES
-        ]
-        assert oversized == [], (
-            f"Help message(s) exceed {MAX_BYTES} bytes: "
-            + ", ".join(f"msg {i}={size}B" for i, size in oversized)
-        )
+        # Check both unprivileged and privileged views
+        for privileged in (False, True):
+            pages = build_help_pages(privileged=privileged)
+            oversized = [
+                (i + 1, len(page.encode("utf-8")))
+                for i, page in enumerate(pages)
+                if len(page.encode("utf-8")) > MAX_BYTES
+            ]
+            assert oversized == [], (
+                f"Help page(s) (privileged={privileged}) exceed {MAX_BYTES} bytes: "
+                + ", ".join(f"page {i}={size}B" for i, size in oversized)
+            )

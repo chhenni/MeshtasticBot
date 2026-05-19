@@ -4,12 +4,14 @@ Command handlers for MeshtasticBot.
 Every handler has the uniform signature:
     handler(text: str, reply_fn: callable, ctx: BotContext) -> None
 
-The COMMANDS dict at the bottom maps command word → handler.
-on_receive in main.py looks up text.split()[0] and calls the handler.
+Commands are defined once in COMMAND_REGISTRY — dispatch (COMMANDS),
+privilege gating (PRIVILEGED_COMMANDS), and /help pages are all derived
+from that single source of truth.
 """
 
 import logging
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from bandplan import (
@@ -48,42 +50,43 @@ from weather import (
 
 log = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Command descriptor
+# ---------------------------------------------------------------------------
 
-HELP_MESSAGES = [
-    "Kommandoer [1/4]:\n"
-    "/help - Vis hjelp\n"
-    "/ping - Status og oppetid\n"
-    "/nodes - Vis noder på meshet\n"
-    "/weather - 7-dagers varsel (GPS)\n"
-    "/24hour|/24h - 24t timevarsel (GPS)",
+HELP_COMMANDS_PER_PAGE = 5
 
-    "Kommandoer [2/4]:\n"
-    "/radio - HF/VHF båndkondisjon\n"
-    "/alert - Sjekk aktive værvarsler nå\n"
-    "/whois <id/navn> - Slå opp en node\n"
-    "/bandplan <bånd> - Vis båndplan\n"
-    "/bandplan_check <freq> - Sjekk frekvens",
-
-    "Kommandoer [3/4]:\n"
-    "/calling <bånd> - Anropsfrekvenser\n"
-    "/mvhf [kanal] - Marin VHF kanaler\n"
-    "/krslog [t] - Meldingslogg (std: 24t, maks: 168t)\n"
-    "/krslast [n] - Siste n meldinger (std: 10, maks: 100)",
-
-    "Info [4/4]:\n"
+HELP_FOOTER = (
     "- Kommandoer funker via DM\n"
     "- GPS må deles for værvarsler\n"
-    "- Lynnvarsler og vindvarsler sendes automatisk",
-]
+    "- Lynnvarsler og vindvarsler sendes automatisk"
+)
 
-PRIVILEGED_HELP_MESSAGES = [
-    "Privilegerte kommandoer [+1]:\n"
-    "/addpriv <node_id> - Legg til privilegert node\n"
-    "/removepriv <node_id> - Fjern privilegert node",
-]
 
-# Commands that require the sender to be in the privileged_nodes list
-PRIVILEGED_COMMANDS: frozenset[str] = frozenset({"/addpriv", "/removepriv"})
+@dataclass
+class Command:
+    """Descriptor for a single bot command."""
+
+    name: str
+    handler: callable
+    description: str
+    privileged: bool = False
+    aliases: list[str] = field(default_factory=list)
+
+
+def build_help_pages(privileged: bool = False) -> list[str]:
+    """Build /help pages from the registry. Privileged commands only shown when privileged=True."""
+    entries = [c for c in COMMAND_REGISTRY if not c.privileged or privileged]
+    lines = []
+    for c in entries:
+        names = "|".join([c.name] + c.aliases)
+        lines.append(f"{names} - {c.description}")
+
+    chunks = [lines[i:i + HELP_COMMANDS_PER_PAGE] for i in range(0, len(lines), HELP_COMMANDS_PER_PAGE)]
+    total = len(chunks) + 1  # +1 for the info/footer page
+    pages = [f"Kommandoer [{i+1}/{total}]:\n" + "\n".join(chunk) for i, chunk in enumerate(chunks)]
+    pages.append(f"Info [{total}/{total}]:\n{HELP_FOOTER}")
+    return pages
 
 
 # ---------------------------------------------------------------------------
@@ -205,15 +208,14 @@ def handle_alert_command(text: str, reply_fn, ctx: BotContext) -> None:
 
 
 def handle_help_command(text: str, reply_fn, ctx: BotContext) -> None:
-    messages = list(HELP_MESSAGES)
     db_conn = ctx.get("db_conn")
     sender = ctx.get("sender")
-    if db_conn is not None and sender and is_privileged(db_conn, sender):
-        messages.extend(PRIVILEGED_HELP_MESSAGES)
-    for i, msg in enumerate(messages):
+    priv = db_conn is not None and sender is not None and is_privileged(db_conn, sender)
+    pages = build_help_pages(privileged=priv)
+    for i, page in enumerate(pages):
         if i > 0:
             time.sleep(2)
-        reply_fn(msg)
+        reply_fn(page)
 
 
 def handle_weather_command(text: str, reply_fn, ctx: BotContext) -> None:
@@ -407,11 +409,6 @@ def handle_krslast_command(text: str, reply_fn, ctx: BotContext) -> None:
     _send_pages(reply_fn, _build_log_pages(rows, f"Siste {len(rows)} meldinger:"))
 
 
-# ---------------------------------------------------------------------------
-# Command registry  —  maps first word of message → handler
-# To add a new command: implement a handler above, add it here. That's it.
-# ---------------------------------------------------------------------------
-
 def handle_addpriv_command(text: str, reply_fn, ctx: BotContext) -> None:
     """Add a node to the privileged list. Usage: /addpriv <node_id>"""
     db_conn = ctx.get("db_conn")
@@ -424,7 +421,6 @@ def handle_addpriv_command(text: str, reply_fn, ctx: BotContext) -> None:
     if db_conn is None:
         reply_fn("❌ Ingen database tilgjengelig.")
         return
-    # Look up the target's current public key from nodes table
     node = get_node(db_conn, target)
     pub_key = node.get("public_key") if node else None
     add_privileged_node(db_conn, target, added_by=sender, public_key=pub_key)
@@ -450,22 +446,38 @@ def handle_removepriv_command(text: str, reply_fn, ctx: BotContext) -> None:
     reply_fn(f"✅ {name} fjernet fra privilegerte noder.")
 
 
-COMMANDS: dict[str, callable] = {
-    "/ping":           handle_ping_command,
-    "/nodes":          handle_nodes_command,
-    "/help":           handle_help_command,
-    "/weather":        handle_weather_command,
-    "/24hour":         handle_24h_command,
-    "/24h":            handle_24h_command,
-    "/radio":          handle_radio_command,
-    "/alert":          handle_alert_command,
-    "/mvhf":           handle_mvhf_command,
-    "/whois":          handle_whois_command,
-    "/krslast":        handle_krslast_command,
-    "/krslog":         handle_krslog_command,
-    "/bandplan_check": handle_bandplan_check_command,
-    "/calling":        handle_calling_command,
-    "/bandplan":       handle_bandplan_command,
-    "/addpriv":        handle_addpriv_command,
-    "/removepriv":     handle_removepriv_command,
-}
+# ---------------------------------------------------------------------------
+# Command registry — single source of truth for dispatch, help, and privileges.
+# To add a command: add a Command entry here. Everything else is derived.
+# ---------------------------------------------------------------------------
+
+COMMAND_REGISTRY: list[Command] = [
+    Command("/help",           handle_help_command,           "Vis hjelp"),
+    Command("/ping",           handle_ping_command,           "Status og oppetid"),
+    Command("/nodes",          handle_nodes_command,          "Vis noder på meshet"),
+    Command("/weather",        handle_weather_command,        "7-dagers varsel (GPS)"),
+    Command("/24hour",         handle_24h_command,            "24t timevarsel (GPS)", aliases=["/24h"]),
+    Command("/radio",          handle_radio_command,          "HF/VHF båndkondisjon"),
+    Command("/alert",          handle_alert_command,          "Sjekk aktive værvarsler nå"),
+    Command("/whois",          handle_whois_command,          "Slå opp en node  <id/navn>"),
+    Command("/bandplan",       handle_bandplan_command,       "Vis båndplan  <bånd>"),
+    Command("/bandplan_check", handle_bandplan_check_command, "Sjekk frekvens  <freq>"),
+    Command("/calling",        handle_calling_command,        "Anropsfrekvenser  <bånd>"),
+    Command("/mvhf",           handle_mvhf_command,           "Marin VHF kanaler  [kanal]"),
+    Command("/krslog",         handle_krslog_command,         "Meldingslogg  [t]"),
+    Command("/krslast",        handle_krslast_command,        "Siste n meldinger  [n]"),
+    Command("/addpriv",        handle_addpriv_command,        "Legg til privilegert node  <node_id>", privileged=True),
+    Command("/removepriv",     handle_removepriv_command,     "Fjern privilegert node  <node_id>",    privileged=True),
+]
+
+# Derived dispatch table — includes aliases
+COMMANDS: dict[str, callable] = {}
+for _cmd in COMMAND_REGISTRY:
+    COMMANDS[_cmd.name] = _cmd.handler
+    for _alias in _cmd.aliases:
+        COMMANDS[_alias] = _cmd.handler
+
+# Derived privilege set
+PRIVILEGED_COMMANDS: frozenset[str] = frozenset(
+    c.name for c in COMMAND_REGISTRY if c.privileged
+)
