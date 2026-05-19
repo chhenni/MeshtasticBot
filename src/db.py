@@ -53,6 +53,15 @@ CREATE TABLE IF NOT EXISTS banned_nodes (
 );
 """
 
+CREATE_PRIVILEGED_NODES_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS privileged_nodes (
+    node_id     TEXT    PRIMARY KEY,
+    public_key  TEXT,
+    added_at    TEXT    NOT NULL,
+    added_by    TEXT    NOT NULL
+);
+"""
+
 
 def init_db(path: str) -> sqlite3.Connection:
     """Open (or create) the SQLite database at *path* and return the connection.
@@ -70,6 +79,12 @@ def init_db(path: str) -> sqlite3.Connection:
     conn.execute(CREATE_NODES_TABLE_SQL)
     conn.execute(CREATE_COMMAND_LOG_TABLE_SQL)
     conn.execute(CREATE_BANNED_NODES_TABLE_SQL)
+    conn.execute(CREATE_PRIVILEGED_NODES_TABLE_SQL)
+    # Migration: add public_key to nodes if upgrading from older schema
+    try:
+        conn.execute("ALTER TABLE nodes ADD COLUMN public_key TEXT")
+    except sqlite3.OperationalError:
+        pass  # column already exists
     conn.commit()
     log.info(f"Message log database opened: {path}")
     return conn
@@ -233,6 +248,7 @@ def upsert_node(
     rssi: int | None = None,
     lat: float | None = None,
     lon: float | None = None,
+    public_key: str | None = None,
 ) -> None:
     """Insert or update a node record, only overwriting non-None fields."""
     if not node_id:
@@ -240,8 +256,9 @@ def upsert_node(
         return
     try:
         conn.execute(
-            "INSERT INTO nodes (node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "INSERT INTO nodes "
+            "(node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon, public_key) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(node_id) DO UPDATE SET "
             "  long_name  = COALESCE(excluded.long_name,  long_name), "
             "  short_name = COALESCE(excluded.short_name, short_name), "
@@ -249,8 +266,9 @@ def upsert_node(
             "  last_snr   = COALESCE(excluded.last_snr,   last_snr), "
             "  last_rssi  = COALESCE(excluded.last_rssi,  last_rssi), "
             "  lat        = COALESCE(excluded.lat,        lat), "
-            "  lon        = COALESCE(excluded.lon,        lon)",
-            (node_id, long_name, short_name, last_seen, snr, rssi, lat, lon),
+            "  lon        = COALESCE(excluded.lon,        lon), "
+            "  public_key = COALESCE(excluded.public_key, public_key)",
+            (node_id, long_name, short_name, last_seen, snr, rssi, lat, lon, public_key),
         )
         conn.commit()
     except sqlite3.Error as exc:
@@ -261,14 +279,14 @@ def get_node(conn: sqlite3.Connection, node_id: str) -> dict | None:
     """Return a node record by exact node_id, or None if not found."""
     try:
         cur = conn.execute(
-            "SELECT node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon "
+            "SELECT node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon, public_key "
             "FROM nodes WHERE node_id = ?",
             (node_id,),
         )
         row = cur.fetchone()
         if row is None:
             return None
-        keys = ("node_id", "long_name", "short_name", "last_seen", "last_snr", "last_rssi", "lat", "lon")
+        keys = ("node_id", "long_name", "short_name", "last_seen", "last_snr", "last_rssi", "lat", "lon", "public_key")
         return dict(zip(keys, row))
     except sqlite3.Error as exc:
         log.error(f"Failed to get node (node_id={node_id}): {exc}")
@@ -294,19 +312,19 @@ def lookup_nodes_by_name(conn: sqlite3.Connection, query: str) -> list[dict]:
 
 def get_all_nodes(conn: sqlite3.Connection, query: str | None = None) -> list[dict]:
     """Return all nodes sorted by last_seen descending. Optionally filter by *query*."""
-    keys = ("node_id", "long_name", "short_name", "last_seen", "last_snr", "last_rssi", "lat", "lon")
+    keys = ("node_id", "long_name", "short_name", "last_seen", "last_snr", "last_rssi", "lat", "lon", "public_key")
     try:
         if query:
             pattern = f"%{query}%"
             cur = conn.execute(
-                "SELECT node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon "
+                "SELECT node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon, public_key "
                 "FROM nodes WHERE node_id LIKE ? OR long_name LIKE ? OR short_name LIKE ? "
                 "ORDER BY last_seen DESC",
                 (pattern, pattern, pattern),
             )
         else:
             cur = conn.execute(
-                "SELECT node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon "
+                "SELECT node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon, public_key "
                 "FROM nodes ORDER BY last_seen DESC"
             )
         return [dict(zip(keys, row)) for row in cur.fetchall()]
@@ -441,3 +459,103 @@ def get_node_command_summary(conn: sqlite3.Connection) -> list[dict]:
     except sqlite3.Error as exc:
         log.error(f"Failed to get node command summary: {exc}")
         return []
+
+
+# ── Privileged nodes ──────────────────────────────────────────────────────────
+
+
+def add_privileged_node(
+    conn: sqlite3.Connection,
+    node_id: str,
+    added_by: str,
+    public_key: str | None = None,
+) -> None:
+    """Add node_id to the privileged list. Idempotent — updates key if already present."""
+    from datetime import datetime, timezone
+    added_at = datetime.now(timezone.utc).isoformat()
+    try:
+        conn.execute(
+            "INSERT INTO privileged_nodes (node_id, public_key, added_at, added_by) "
+            "VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(node_id) DO UPDATE SET "
+            "  public_key = COALESCE(excluded.public_key, public_key), "
+            "  added_at   = excluded.added_at, "
+            "  added_by   = excluded.added_by",
+            (node_id, public_key, added_at, added_by),
+        )
+        conn.commit()
+    except sqlite3.Error as exc:
+        log.error(f"Failed to add privileged node (node_id={node_id}): {exc}")
+
+
+def remove_privileged_node(conn: sqlite3.Connection, node_id: str) -> None:
+    """Remove node_id from the privileged list. Idempotent."""
+    try:
+        conn.execute("DELETE FROM privileged_nodes WHERE node_id = ?", (node_id,))
+        conn.commit()
+    except sqlite3.Error as exc:
+        log.error(f"Failed to remove privileged node (node_id={node_id}): {exc}")
+
+
+def get_privileged_nodes(conn: sqlite3.Connection) -> list[dict]:
+    """Return all privileged nodes joined with nodes table for display info.
+
+    Includes a 'key_status' field: 'match', 'mismatch', 'unverified' (no key stored),
+    or 'unknown' (node not yet seen on mesh).
+    """
+    keys = (
+        "node_id", "public_key", "added_at", "added_by",
+        "long_name", "short_name", "key_status",
+    )
+    try:
+        cur = conn.execute(
+            """
+            SELECT
+                p.node_id,
+                p.public_key,
+                p.added_at,
+                p.added_by,
+                n.long_name,
+                n.short_name,
+                CASE
+                    WHEN p.public_key IS NULL              THEN 'unverified'
+                    WHEN n.public_key IS NULL              THEN 'unknown'
+                    WHEN p.public_key = n.public_key       THEN 'match'
+                    ELSE                                        'mismatch'
+                END AS key_status
+            FROM privileged_nodes p
+            LEFT JOIN nodes n ON p.node_id = n.node_id
+            ORDER BY p.added_at DESC
+            """
+        )
+        return [dict(zip(keys, row)) for row in cur.fetchall()]
+    except sqlite3.Error as exc:
+        log.error(f"Failed to get privileged nodes: {exc}")
+        return []
+
+
+def is_privileged(
+    conn: sqlite3.Connection,
+    node_id: str,
+    public_key: str | None = None,
+) -> bool:
+    """Return True if node_id is privileged.
+
+    If *public_key* is provided AND a key is stored for this node, the keys
+    must match. If no key is stored, node_id membership alone is sufficient.
+    """
+    try:
+        cur = conn.execute(
+            "SELECT public_key FROM privileged_nodes WHERE node_id = ?",
+            (node_id,),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return False
+        stored_key = row[0]
+        if stored_key is not None and public_key is not None:
+            return stored_key == public_key
+        return True
+    except sqlite3.Error as exc:
+        log.error(f"Failed to check privilege status (node_id={node_id}): {exc}")
+        return False

@@ -15,6 +15,7 @@ from functools import wraps
 from flask import Flask, Response, jsonify, redirect, render_template, request, url_for
 
 from db import (
+    add_privileged_node,
     ban_node,
     get_all_nodes,
     get_banned_nodes,
@@ -22,7 +23,10 @@ from db import (
     get_last_message_time,
     get_message_counts,
     get_messages_page,
+    get_node,
     get_node_command_summary,
+    get_privileged_nodes,
+    remove_privileged_node,
     unban_node,
 )
 
@@ -239,6 +243,36 @@ def create_app(db_conn, bot_state: dict, admin_username: str = "", admin_passwor
     @app.route("/map")
     def map_view():
         return render_template("map.html")
+
+    @app.route("/admin/privileged")
+    @require_admin
+    def privileged_nodes_page():
+        conn = app.config["db_conn"]
+        priv_nodes = get_privileged_nodes(conn) if conn else []
+        all_nodes = get_all_nodes(conn) if conn else []
+        return render_template("privileged.html", rows=priv_nodes, all_nodes=all_nodes)
+
+    @app.route("/admin/privileged/add", methods=["POST"])
+    @require_admin
+    def privileged_add():
+        conn = app.config["db_conn"]
+        node_id = request.form.get("node_id", "").strip()
+        if node_id and conn:
+            node = get_node(conn, node_id)
+            pub_key = node.get("public_key") if node else None
+            add_privileged_node(conn, node_id, added_by="web", public_key=pub_key)
+            push_event("privilege_update", {"action": "add", "node_id": node_id})
+        return redirect("/admin/privileged")
+
+    @app.route("/admin/privileged/remove", methods=["POST"])
+    @require_admin
+    def privileged_remove():
+        conn = app.config["db_conn"]
+        node_id = request.form.get("node_id", "").strip()
+        if node_id and conn:
+            remove_privileged_node(conn, node_id)
+            push_event("privilege_update", {"action": "remove", "node_id": node_id})
+        return redirect("/admin/privileged")
 
     return app
 

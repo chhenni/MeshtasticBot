@@ -20,9 +20,17 @@ import meshtastic.tcp_interface
 import yaml
 from pubsub import pub
 
-from commands import COMMANDS
+from commands import COMMANDS, PRIVILEGED_COMMANDS
 from context import BotContext
-from db import init_db, is_banned, log_command, purge_old_messages, store_message, upsert_node
+from db import (
+    init_db,
+    is_banned,
+    is_privileged,
+    log_command,
+    purge_old_messages,
+    store_message,
+    upsert_node,
+)
 from dummy import DummyInterface, run_dummy_loop
 from weather import (
     format_alert_message,
@@ -73,6 +81,8 @@ COMMAND_COSTS: dict[str, int] = {
     "/bandplan_check": 3,
     "/krslog":         3,
     "/krslast":        3,
+    "/addpriv":        1,
+    "/removepriv":     1,
 }
 
 CONFIG_FILE = "config.yaml"
@@ -259,6 +269,7 @@ def make_receive_handler(
             reply_fn = None
 
         # Store every received message. DMs are stored with channel = -1.
+        node_info = (interface.nodes or {}).get(sender, {})
         if db_conn is not None:
             raw_id = packet.get("id")
             packet_id = str(raw_id) if raw_id else str(uuid4())
@@ -279,7 +290,6 @@ def make_receive_handler(
                 "received_at": received_at,
             })
 
-            node_info = (interface.nodes or {}).get(sender, {})
             node_data = {
                 "node_id": sender,
                 "long_name": node_info.get("user", {}).get("longName"),
@@ -289,6 +299,7 @@ def make_receive_handler(
                 "last_rssi": packet.get("rxRssi"),
                 "lat": node_info.get("position", {}).get("latitude"),
                 "lon": node_info.get("position", {}).get("longitude"),
+                "public_key": node_info.get("user", {}).get("publicKey"),
             }
             upsert_node(
                 db_conn,
@@ -300,6 +311,7 @@ def make_receive_handler(
                 rssi=node_data["last_rssi"],
                 lat=node_data["lat"],
                 lon=node_data["lon"],
+                public_key=node_data["public_key"],
             )
             push_event("node_update", node_data)
 
@@ -317,6 +329,16 @@ def make_receive_handler(
             log_command(db_conn, sender, cmd, "banned")
             push_event("audit_update", {"node_id": sender, "command": cmd, "status": "banned"})
             return
+
+        # Check privilege for restricted commands
+        if cmd in PRIVILEGED_COMMANDS:
+            sender_key = node_info.get("user", {}).get("publicKey") if db_conn is not None else None
+            if db_conn is None or not is_privileged(db_conn, sender, sender_key):
+                log.info(f"Unprivileged node {sender} attempted privileged command {cmd} — ignoring.")
+                if db_conn is not None:
+                    log_command(db_conn, sender, cmd, "not_privileged")
+                    push_event("audit_update", {"node_id": sender, "command": cmd, "status": "not_privileged"})
+                return
 
         cost = COMMAND_COSTS.get(cmd, 1)
         bucket = _get_tokens(sender)
