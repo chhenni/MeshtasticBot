@@ -251,6 +251,9 @@ def upsert_node(
     public_key: str | None = None,
 ) -> None:
     """Insert or update a node record, only overwriting non-None fields."""
+    if not node_id:
+        log.warning("upsert_node called with empty node_id — skipping")
+        return
     try:
         conn.execute(
             "INSERT INTO nodes "
