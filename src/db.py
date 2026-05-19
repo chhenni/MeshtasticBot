@@ -235,6 +235,9 @@ def upsert_node(
     lon: float | None = None,
 ) -> None:
     """Insert or update a node record, only overwriting non-None fields."""
+    if not node_id:
+        log.warning("upsert_node called with empty node_id — skipping")
+        return
     try:
         conn.execute(
             "INSERT INTO nodes (node_id, long_name, short_name, last_seen, last_snr, last_rssi, lat, lon) "
