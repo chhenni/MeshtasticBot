@@ -34,7 +34,7 @@
     </thead>
     <tbody>
       {% for n in rows %}
-      <tr>
+      <tr id="node-row-{{ n.node_id[1:] }}">
         <td><code>{{ n.node_id }}</code></td>
         <td>
           {% if n.long_name %}
@@ -48,16 +48,16 @@
         </td>
         <td class="text-end">
           {% if n.last_snr is not none %}
-            <span class="{% if n.last_snr >= 5 %}text-success{% elif n.last_snr >= 0 %}text-warning{% else %}text-danger{% endif %}">
+            <span data-snr class="{% if n.last_snr >= 5 %}text-success{% elif n.last_snr >= 0 %}text-warning{% else %}text-danger{% endif %}">
               {{ "%.1f"|format(n.last_snr) }}
             </span>
-          {% else %}<span class="text-muted">—</span>{% endif %}
+          {% else %}<span data-snr class="text-muted">—</span>{% endif %}
         </td>
         <td class="text-end">
-          {% if n.last_rssi is not none %}{{ n.last_rssi }}{% else %}<span class="text-muted">—</span>{% endif %}
+          {% if n.last_rssi is not none %}<span data-rssi>{{ n.last_rssi }}</span>{% else %}<span data-rssi class="text-muted">—</span>{% endif %}
         </td>
         <td class="font-monospace small">
-          {% if n.last_seen %}{{ n.last_seen[:19].replace('T', ' ') }}{% else %}—{% endif %}
+          {% if n.last_seen %}<span data-seen>{{ n.last_seen[:19].replace('T', ' ') }}</span>{% else %}<span data-seen>—</span>{% endif %}
         </td>
         <td>
           {% if n.lat is not none and n.lon is not none %}

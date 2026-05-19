@@ -30,7 +30,7 @@ from weather import (
     get_lightning_alerts,
     get_wind_alerts,
 )
-from web import start_web_server
+from web import push_event, start_web_server
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -272,19 +272,36 @@ def make_receive_handler(
                     "text": text,
                     "received_at": received_at,
                 }
+            push_event("message", {
+                "channel": store_channel,
+                "sender_id": sender,
+                "text": text,
+                "received_at": received_at,
+            })
 
             node_info = (interface.nodes or {}).get(sender, {})
+            node_data = {
+                "node_id": sender,
+                "long_name": node_info.get("user", {}).get("longName"),
+                "short_name": node_info.get("user", {}).get("shortName"),
+                "last_seen": received_at,
+                "last_snr": packet.get("rxSnr"),
+                "last_rssi": packet.get("rxRssi"),
+                "lat": node_info.get("position", {}).get("latitude"),
+                "lon": node_info.get("position", {}).get("longitude"),
+            }
             upsert_node(
                 db_conn,
-                node_id=sender,
-                long_name=node_info.get("user", {}).get("longName"),
-                short_name=node_info.get("user", {}).get("shortName"),
-                last_seen=received_at,
-                snr=packet.get("rxSnr"),
-                rssi=packet.get("rxRssi"),
-                lat=node_info.get("position", {}).get("latitude"),
-                lon=node_info.get("position", {}).get("longitude"),
+                node_id=node_data["node_id"],
+                long_name=node_data["long_name"],
+                short_name=node_data["short_name"],
+                last_seen=node_data["last_seen"],
+                snr=node_data["last_snr"],
+                rssi=node_data["last_rssi"],
+                lat=node_data["lat"],
+                lon=node_data["lon"],
             )
+            push_event("node_update", node_data)
 
         if reply_fn is None:
             return
@@ -298,6 +315,7 @@ def make_receive_handler(
         if db_conn is not None and is_banned(db_conn, sender):
             log.info(f"Banned node {sender} attempted {cmd} — ignoring.")
             log_command(db_conn, sender, cmd, "banned")
+            push_event("audit_update", {"node_id": sender, "command": cmd, "status": "banned"})
             return
 
         cost = COMMAND_COSTS.get(cmd, 1)
@@ -306,6 +324,7 @@ def make_receive_handler(
             log.info(f"Rate limit: dropping {cmd} from {sender} (need {cost} tokens, have {bucket[0]:.1f})")
             if db_conn is not None:
                 log_command(db_conn, sender, cmd, "rate_limited")
+                push_event("audit_update", {"node_id": sender, "command": cmd, "status": "rate_limited"})
             if sender not in _warned:
                 _warned.add(sender)
                 reply_fn("⛔ For mange kommandoer på kort tid. Vent litt og prøv igjen.")
@@ -315,6 +334,7 @@ def make_receive_handler(
 
         if db_conn is not None:
             log_command(db_conn, sender, cmd, "ok")
+            push_event("audit_update", {"node_id": sender, "command": cmd, "status": "ok"})
 
         ctx: BotContext = {
             "interface": interface,

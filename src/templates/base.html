@@ -9,6 +9,7 @@
     body { padding-top: 1rem; }
     .nav-link.active { font-weight: 600; }
     .table td, .table th { vertical-align: middle; }
+    .sse-badge { font-size: 0.7rem; }
   </style>
 </head>
 <body>
@@ -19,11 +20,71 @@
       <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">Logs</a>
       <a class="nav-link {% if request.path == '/status' %}active{% endif %}" href="/status">Status</a>
       <a class="nav-link {% if request.path == '/nodes' %}active{% endif %}" href="/nodes">Nodes</a>
+      <a class="nav-link {% if request.path == '/map' %}active{% endif %}" href="/map">Map 🗺️</a>
       <a class="nav-link {% if request.path == '/audit' %}active{% endif %}" href="/audit">Audit 🔒</a>
     </div>
+    <span class="ms-auto badge bg-secondary sse-badge" id="sse-status" title="Live updates">⬤ connecting</span>
   </nav>
   {% block content %}{% endblock %}
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── SSE live updates ──────────────────────────────────────────────────────────
+(function () {
+  const badge = document.getElementById('sse-status');
+  function setStatus(label, cls) {
+    badge.textContent = '⬤ ' + label;
+    badge.className = 'ms-auto badge sse-badge ' + cls;
+  }
+
+  const es = new EventSource('/api/events');
+
+  es.addEventListener('heartbeat', () => setStatus('live', 'bg-success'));
+  es.onerror = () => setStatus('disconnected', 'bg-danger');
+
+  // ── Audit page: prepend new command row ──
+  es.addEventListener('audit_update', function (e) {
+    window.dispatchEvent(new CustomEvent('sse:audit_update', { detail: JSON.parse(e.data) }));
+  });
+
+  // ── Logs page: prepend new message row ──
+  es.addEventListener('message', function (e) {
+    const tbody = document.getElementById('message-tbody');
+    if (!tbody) return;
+    const m = JSON.parse(e.data);
+    const name = m.long_name || m.short_name
+      ? `${m.long_name || m.short_name}<span class="text-muted small d-block">${m.sender_id}</span>`
+      : m.sender_id;
+    const ts = (m.received_at || '').slice(0, 19).replace('T', ' ');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="text-nowrap text-muted small">${ts}</td>
+      <td>${m.channel}</td>
+      <td class="font-monospace small">${name}</td>
+      <td>${m.text}</td>`;
+    tr.style.animation = 'fadeIn 0.4s';
+    tbody.prepend(tr);
+  });
+
+  // ── Nodes page: refresh the row for an updated node ──
+  es.addEventListener('node_update', function (e) {
+    const n = JSON.parse(e.data);
+    const row = document.getElementById('node-row-' + n.node_id.replace('!', ''));
+    if (!row) return;
+    const seen = n.last_seen ? n.last_seen.slice(0, 19).replace('T', ' ') : '—';
+    const snrCell = row.querySelector('[data-snr]');
+    const rssiCell = row.querySelector('[data-rssi]');
+    const seenCell = row.querySelector('[data-seen]');
+    if (snrCell)  snrCell.textContent = n.last_snr  !== null ? n.last_snr.toFixed(1) : '—';
+    if (rssiCell) rssiCell.textContent = n.last_rssi !== null ? n.last_rssi : '—';
+    if (seenCell) seenCell.textContent = seen;
+    row.style.animation = 'none';
+    row.offsetHeight; // reflow
+    row.style.animation = 'fadeIn 0.4s';
+  });
+})();
+</script>
+<style>
+@keyframes fadeIn { from { background: #fffbe6; } to { background: transparent; } }
+</style>
 </body>
 </html>
