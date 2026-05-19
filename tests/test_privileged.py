@@ -287,3 +287,35 @@ class TestAddRemovePrivCommands:
         replies = []
         handle_removepriv_command("/removepriv", replies.append, self._ctx(db))
         assert "Bruk:" in replies[0]
+
+
+class TestHelpVisibility:
+    def _ctx(self, db, sender="!user"):
+        return {"db_conn": db, "sender": sender, "interface": None,
+                "log_channel": 0, "start_time": None, "county": "03"}
+
+    def test_unprivileged_user_does_not_see_priv_commands(self, db):
+        from commands import handle_help_command
+        replies = []
+        handle_help_command("/help", replies.append, self._ctx(db))
+        combined = "\n".join(replies)
+        assert "/addpriv" not in combined
+        assert "/removepriv" not in combined
+
+    def test_privileged_user_sees_priv_commands(self, db):
+        from commands import handle_help_command
+        add_privileged_node(db, "!admin", added_by="test")
+        replies = []
+        handle_help_command("/help", replies.append, self._ctx(db, sender="!admin"))
+        combined = "\n".join(replies)
+        assert "/addpriv" in combined
+        assert "/removepriv" in combined
+
+    def test_no_db_does_not_show_priv_commands(self, db):
+        from commands import handle_help_command
+        ctx = {"db_conn": None, "sender": "!user", "interface": None,
+               "log_channel": 0, "start_time": None, "county": "03"}
+        replies = []
+        handle_help_command("/help", replies.append, ctx)
+        combined = "\n".join(replies)
+        assert "/addpriv" not in combined

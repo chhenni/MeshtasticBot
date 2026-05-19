@@ -28,6 +28,7 @@ from db import (
     get_last_messages,
     get_node,
     get_recent_messages,
+    is_privileged,
     lookup_nodes_by_name,
     remove_privileged_node,
 )
@@ -72,8 +73,13 @@ HELP_MESSAGES = [
     "Info [4/4]:\n"
     "- Kommandoer funker via DM\n"
     "- GPS må deles for værvarsler\n"
-    "- Lynnvarsler og vindvarsler sendes automatisk\n"
-    "- /addpriv og /removepriv krever privilegert node",
+    "- Lynnvarsler og vindvarsler sendes automatisk",
+]
+
+PRIVILEGED_HELP_MESSAGES = [
+    "Privilegerte kommandoer [+1]:\n"
+    "/addpriv <node_id> - Legg til privilegert node\n"
+    "/removepriv <node_id> - Fjern privilegert node",
 ]
 
 # Commands that require the sender to be in the privileged_nodes list
@@ -199,7 +205,12 @@ def handle_alert_command(text: str, reply_fn, ctx: BotContext) -> None:
 
 
 def handle_help_command(text: str, reply_fn, ctx: BotContext) -> None:
-    for i, msg in enumerate(HELP_MESSAGES):
+    messages = list(HELP_MESSAGES)
+    db_conn = ctx.get("db_conn")
+    sender = ctx.get("sender")
+    if db_conn is not None and sender and is_privileged(db_conn, sender):
+        messages.extend(PRIVILEGED_HELP_MESSAGES)
+    for i, msg in enumerate(messages):
         if i > 0:
             time.sleep(2)
         reply_fn(msg)
