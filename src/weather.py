@@ -4,15 +4,15 @@ Weather utilities:
 - 7-day location forecast via yr.no locationforecast API
 """
 
-import logging
 from collections import defaultdict
 from datetime import datetime, timezone
 
 import requests
+import structlog
 
 from constants import MAX_BYTES, PACK_BYTES, USER_AGENT
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger()
 
 METALERTS_URL = "https://api.met.no/weatherapi/metalerts/2.0/all.json"
 FORECAST_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
@@ -104,7 +104,7 @@ def get_forecast(lat: float, lon: float) -> list[dict] | None:
         resp.raise_for_status()
         timeseries = resp.json()["properties"]["timeseries"]
     except (requests.RequestException, KeyError, ValueError) as e:
-        log.error(f"Failed to fetch forecast: {e}")
+        log.error("fetch_forecast_failed", error=str(e))
         return None
 
     # Group hourly entries by UTC date
@@ -176,7 +176,7 @@ def get_forecast_24h(lat: float, lon: float) -> list[dict] | None:
         resp.raise_for_status()
         timeseries = resp.json()["properties"]["timeseries"]
     except (requests.RequestException, KeyError, ValueError) as e:
-        log.error(f"Failed to fetch 24h forecast: {e}")
+        log.error("fetch_forecast_24h_failed", error=str(e))
         return None
 
     now = datetime.now(tz=timezone.utc)
@@ -317,7 +317,7 @@ def fetch_alerts(county: str) -> list[dict]:
         resp.raise_for_status()
         return resp.json().get("features", [])
     except requests.RequestException as e:
-        log.error(f"Failed to fetch weather alerts: {e}")
+        log.error("fetch_weather_alerts_failed", error=str(e))
         return []
 
 

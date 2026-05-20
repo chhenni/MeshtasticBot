@@ -5,11 +5,12 @@ Provides init_db() to open/create the database and store_message() to persist
 received channel messages with deduplication by packet ID.
 """
 
-import logging
 import os
 import sqlite3
 
-log = logging.getLogger(__name__)
+import structlog
+
+log = structlog.get_logger()
 
 CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -86,7 +87,7 @@ def init_db(path: str) -> sqlite3.Connection:
     except sqlite3.OperationalError:
         pass  # column already exists
     conn.commit()
-    log.info(f"Message log database opened: {path}")
+    log.info("db_opened", path=path)
     return conn
 
 
@@ -105,7 +106,7 @@ def get_recent_messages(
         )
         return [{"sender_id": r[0], "text": r[1], "received_at": r[2]} for r in cur.fetchall()]
     except sqlite3.Error as exc:
-        log.error(f"Failed to query messages: {exc}")
+        log.error("query_messages_failed", error=str(exc))
         return []
 
 
@@ -125,7 +126,7 @@ def get_last_messages(
         )
         return [{"sender_id": r[0], "text": r[1], "received_at": r[2]} for r in cur.fetchall()]
     except sqlite3.Error as exc:
-        log.error(f"Failed to query last messages: {exc}")
+        log.error("query_last_messages_failed", error=str(exc))
         return []
 
 
@@ -173,7 +174,7 @@ def get_messages_page(
         ]
         return rows, total
     except sqlite3.Error as exc:
-        log.error(f"Failed to query messages page: {exc}")
+        log.error("query_messages_page_failed", error=str(exc))
         return [], 0
 
 
@@ -189,7 +190,7 @@ def get_message_counts(conn: sqlite3.Connection) -> dict:
         ).fetchall()
         return {"total": total, "last_24h": today, "by_channel": dict(channels)}
     except sqlite3.Error as exc:
-        log.error(f"Failed to get message counts: {exc}")
+        log.error("get_message_counts_failed", error=str(exc))
         return {"total": 0, "last_24h": 0, "by_channel": {}}
 
 
@@ -199,7 +200,7 @@ def get_last_message_time(conn: sqlite3.Connection) -> str | None:
         row = conn.execute("SELECT MAX(received_at) FROM messages").fetchone()
         return row[0] if row else None
     except sqlite3.Error as exc:
-        log.error(f"Failed to get last message time: {exc}")
+        log.error("get_last_message_time_failed", error=str(exc))
         return None
 
 
@@ -212,10 +213,10 @@ def purge_old_messages(conn: sqlite3.Connection, days: int = 365) -> int:
         )
         conn.commit()
         if cur.rowcount:
-            log.info(f"Purged {cur.rowcount} message(s) older than {days} days.")
+            log.info("db_purged", rows=cur.rowcount, older_than_days=days)
         return cur.rowcount
     except sqlite3.Error as exc:
-        log.error(f"Failed to purge old messages: {exc}")
+        log.error("db_purge_failed", error=str(exc))
         return 0
 
 def store_message(
@@ -235,7 +236,7 @@ def store_message(
         )
         conn.commit()
     except sqlite3.Error as exc:
-        log.error(f"Failed to store message (packet_id={packet_id}): {exc}")
+        log.error("store_message_failed", packet_id=packet_id, error=str(exc))
 
 
 def upsert_node(
@@ -252,7 +253,7 @@ def upsert_node(
 ) -> None:
     """Insert or update a node record, only overwriting non-None fields."""
     if not node_id:
-        log.warning("upsert_node called with empty node_id — skipping")
+        log.warning("upsert_node_skipped", reason="empty_node_id")
         return
     try:
         conn.execute(
@@ -272,7 +273,7 @@ def upsert_node(
         )
         conn.commit()
     except sqlite3.Error as exc:
-        log.error(f"Failed to upsert node (node_id={node_id}): {exc}")
+        log.error("upsert_node_failed", node_id=node_id, error=str(exc))
 
 
 def get_node(conn: sqlite3.Connection, node_id: str) -> dict | None:
@@ -289,7 +290,7 @@ def get_node(conn: sqlite3.Connection, node_id: str) -> dict | None:
         keys = ("node_id", "long_name", "short_name", "last_seen", "last_snr", "last_rssi", "lat", "lon", "public_key")
         return dict(zip(keys, row))
     except sqlite3.Error as exc:
-        log.error(f"Failed to get node (node_id={node_id}): {exc}")
+        log.error("get_node_failed", node_id=node_id, error=str(exc))
         return None
 
 
@@ -306,7 +307,7 @@ def lookup_nodes_by_name(conn: sqlite3.Connection, query: str) -> list[dict]:
         keys = ("node_id", "long_name", "short_name", "last_seen", "last_snr", "last_rssi", "lat", "lon")
         return [dict(zip(keys, row)) for row in cur.fetchall()]
     except sqlite3.Error as exc:
-        log.error(f"Failed to lookup nodes by name (query={query!r}): {exc}")
+        log.error("lookup_nodes_failed", query=query, error=str(exc))
         return []
 
 
@@ -329,7 +330,7 @@ def get_all_nodes(conn: sqlite3.Connection, query: str | None = None) -> list[di
             )
         return [dict(zip(keys, row)) for row in cur.fetchall()]
     except sqlite3.Error as exc:
-        log.error(f"Failed to get all nodes: {exc}")
+        log.error("get_all_nodes_failed", error=str(exc))
         return []
 
 
@@ -351,7 +352,7 @@ def log_command(
         )
         conn.commit()
     except sqlite3.Error as exc:
-        log.error(f"Failed to log command (node_id={node_id}, cmd={command}): {exc}")
+        log.error("log_command_failed", node_id=node_id, cmd=command, error=str(exc))
 
 
 def get_command_log(
@@ -380,7 +381,7 @@ def get_command_log(
         )
         return [dict(zip(keys, row)) for row in cur.fetchall()]
     except sqlite3.Error as exc:
-        log.error(f"Failed to get command log: {exc}")
+        log.error("get_command_log_failed", error=str(exc))
         return []
 
 
@@ -397,7 +398,7 @@ def ban_node(conn: sqlite3.Connection, node_id: str, reason: str | None = None) 
         )
         conn.commit()
     except sqlite3.Error as exc:
-        log.error(f"Failed to ban node (node_id={node_id}): {exc}")
+        log.error("ban_node_failed", node_id=node_id, error=str(exc))
 
 
 def unban_node(conn: sqlite3.Connection, node_id: str) -> None:
@@ -406,7 +407,7 @@ def unban_node(conn: sqlite3.Connection, node_id: str) -> None:
         conn.execute("DELETE FROM banned_nodes WHERE node_id = ?", (node_id,))
         conn.commit()
     except sqlite3.Error as exc:
-        log.error(f"Failed to unban node (node_id={node_id}): {exc}")
+        log.error("unban_node_failed", node_id=node_id, error=str(exc))
 
 
 def is_banned(conn: sqlite3.Connection, node_id: str) -> bool:
@@ -415,7 +416,7 @@ def is_banned(conn: sqlite3.Connection, node_id: str) -> bool:
         cur = conn.execute("SELECT 1 FROM banned_nodes WHERE node_id = ?", (node_id,))
         return cur.fetchone() is not None
     except sqlite3.Error as exc:
-        log.error(f"Failed to check ban status (node_id={node_id}): {exc}")
+        log.error("check_ban_failed", node_id=node_id, error=str(exc))
         return False
 
 
@@ -428,7 +429,7 @@ def get_banned_nodes(conn: sqlite3.Connection) -> list[dict]:
         )
         return [dict(zip(keys, row)) for row in cur.fetchall()]
     except sqlite3.Error as exc:
-        log.error(f"Failed to get banned nodes: {exc}")
+        log.error("get_banned_nodes_failed", error=str(exc))
         return []
 
 
@@ -457,7 +458,7 @@ def get_node_command_summary(conn: sqlite3.Connection) -> list[dict]:
         )
         return [dict(zip(keys, row)) for row in cur.fetchall()]
     except sqlite3.Error as exc:
-        log.error(f"Failed to get node command summary: {exc}")
+        log.error("get_node_command_summary_failed", error=str(exc))
         return []
 
 
@@ -485,7 +486,7 @@ def add_privileged_node(
         )
         conn.commit()
     except sqlite3.Error as exc:
-        log.error(f"Failed to add privileged node (node_id={node_id}): {exc}")
+        log.error("add_privileged_node_failed", node_id=node_id, error=str(exc))
 
 
 def remove_privileged_node(conn: sqlite3.Connection, node_id: str) -> None:
@@ -494,7 +495,7 @@ def remove_privileged_node(conn: sqlite3.Connection, node_id: str) -> None:
         conn.execute("DELETE FROM privileged_nodes WHERE node_id = ?", (node_id,))
         conn.commit()
     except sqlite3.Error as exc:
-        log.error(f"Failed to remove privileged node (node_id={node_id}): {exc}")
+        log.error("remove_privileged_node_failed", node_id=node_id, error=str(exc))
 
 
 def get_privileged_nodes(conn: sqlite3.Connection) -> list[dict]:
@@ -530,7 +531,7 @@ def get_privileged_nodes(conn: sqlite3.Connection) -> list[dict]:
         )
         return [dict(zip(keys, row)) for row in cur.fetchall()]
     except sqlite3.Error as exc:
-        log.error(f"Failed to get privileged nodes: {exc}")
+        log.error("get_privileged_nodes_failed", error=str(exc))
         return []
 
 
@@ -557,5 +558,5 @@ def is_privileged(
             return stored_key == public_key
         return True
     except sqlite3.Error as exc:
-        log.error(f"Failed to check privilege status (node_id={node_id}): {exc}")
+        log.error("check_privilege_failed", node_id=node_id, error=str(exc))
         return False
