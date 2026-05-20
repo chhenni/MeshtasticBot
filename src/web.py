@@ -5,13 +5,13 @@ Started as a daemon thread from main.py when web.enabled is true in config.yaml.
 """
 
 import json
-import logging
 import math
 import queue
 import threading
 from datetime import datetime, timezone
 from functools import wraps
 
+import structlog
 from flask import Flask, Response, jsonify, redirect, render_template, request, url_for
 
 from db import (
@@ -30,7 +30,7 @@ from db import (
     unban_node,
 )
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger()
 
 PAGE_SIZE = 50
 
@@ -298,7 +298,7 @@ def start_web_server(db_conn, bot_state: dict, port: int = 8080, admin_username:
     app = create_app(db_conn, bot_state, admin_username=admin_username, admin_password=admin_password)
 
     def run():
-        log.info(f"Web UI starting on http://0.0.0.0:{port}")
+        log.info("web_server_starting", port=port)
         # Use werkzeug directly to suppress the dev-server warning
         from werkzeug.serving import make_server
         srv = make_server("0.0.0.0", port, app, threaded=True)

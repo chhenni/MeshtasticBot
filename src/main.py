@@ -6,7 +6,6 @@ Configuration is loaded from config.yaml. See config.yaml for available options.
 """
 
 import argparse
-import logging
 import os
 import signal
 import threading
@@ -17,6 +16,7 @@ from uuid import uuid4
 import meshtastic.ble_interface
 import meshtastic.serial_interface
 import meshtastic.tcp_interface
+import structlog
 import yaml
 from pubsub import pub
 
@@ -32,6 +32,7 @@ from db import (
     upsert_node,
 )
 from dummy import DummyInterface, run_dummy_loop
+from log_config import configure_logging
 from weather import (
     format_alert_message,
     format_wind_alert_message,
@@ -40,8 +41,8 @@ from weather import (
 )
 from web import push_event, start_web_server
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-log = logging.getLogger(__name__)
+configure_logging()
+log = structlog.get_logger()
 
 
 def send_text_with_retry(interface, text: str, max_attempts: int = 5, base_delay: float = 0.5, **kwargs) -> None:
@@ -58,9 +59,13 @@ def send_text_with_retry(interface, text: str, max_attempts: int = 5, base_delay
             return
         except MeshInterface.MeshInterfaceError as exc:
             if attempt == max_attempts:
-                log.error(f"sendText failed after {max_attempts} attempts: {exc}")
+                log.error("send_text_failed", attempts=max_attempts, error=str(exc))
                 return
-            log.warning(f"sendText attempt {attempt}/{max_attempts} failed ({exc}) — retrying in {delay:.1f}s")
+            log.warning(
+                "send_text_retry",
+                attempt=attempt, max_attempts=max_attempts,
+                error=str(exc), retry_delay=round(delay, 1),
+            )
             time.sleep(delay)
             delay *= 2
 
@@ -124,9 +129,9 @@ def load_config(path: str) -> dict:
         kind = type(existing) if existing is not None else str
         try:
             _set_nested(cfg, keys, _coerce(raw, kind))
-            log.info(f"Config override from env: {env_var}")
+            log.info("config_env_override", env_var=env_var)
         except (ValueError, TypeError) as exc:
-            log.warning(f"Ignoring invalid env var {env_var}={raw!r}: {exc}")
+            log.warning("config_env_override_invalid", env_var=env_var, value=raw, error=str(exc))
     return cfg
 
 
@@ -185,17 +190,17 @@ def connect(cfg: dict):
 
     if kind == "serial":
         port = conn.get("port")
-        log.info(f"Connecting via serial (port={port or 'auto'})...")
+        log.info("connecting", transport="serial", port=port or "auto")
         return meshtastic.serial_interface.SerialInterface(devPath=port)
 
     if kind == "tcp":
         host = conn["host"]
-        log.info(f"Connecting via TCP ({host})...")
+        log.info("connecting", transport="tcp", host=host)
         return meshtastic.tcp_interface.TCPInterface(hostname=host)
 
     if kind == "ble":
         address = conn.get("address")
-        log.info(f"Connecting via BLE (address={address or 'auto'})...")
+        log.info("connecting", transport="ble", address=address or "auto")
         return meshtastic.ble_interface.BLEInterface(address=address)
 
     raise ValueError(f"Unknown connection type: {kind!r}")
@@ -214,7 +219,7 @@ def connect_with_retry(cfg: dict, base_delay: float = 5.0, max_delay: float = 30
             return connect(cfg)
         except Exception as exc:
             delay = min(base_delay * (2 ** attempt), max_delay)
-            log.error(f"Connection failed (attempt {attempt + 1}): {exc}. Retrying in {delay:.0f}s…")
+            log.error("connection_failed", attempt=attempt + 1, error=str(exc), retry_delay_s=round(delay))
             time.sleep(delay)
             attempt += 1
 
@@ -256,14 +261,14 @@ def make_receive_handler(
         pkt_channel = packet.get("channel", 0)
 
         if is_dm:
-            log.info(f"[DM from {sender}]: {text}")
+            log.info("message_received", direction="dm", sender=sender)
             def reply_fn(msg, _to=sender):
-                log.info(f"[DM to {_to}]: {msg}")
+                log.info("message_sent", direction="dm", to=_to)
                 send_text_with_retry(interface, msg, destinationId=_to, channelIndex=0)
         elif pkt_channel == channel:
-            log.info(f"[ch{channel} from {sender}]: {text}")
+            log.info("message_received", direction="channel", channel=channel, sender=sender)
             def reply_fn(msg, _ch=channel, _to=sender):
-                log.info(f"[ch{_ch} to {_to}]: {msg}")
+                log.info("message_sent", direction="channel", channel=_ch, to=_to)
                 send_text_with_retry(interface, msg, channelIndex=_ch)
         else:
             reply_fn = None
@@ -325,7 +330,7 @@ def make_receive_handler(
 
         # Check ban before anything else — silently ignore and log
         if db_conn is not None and is_banned(db_conn, sender):
-            log.info(f"Banned node {sender} attempted {cmd} — ignoring.")
+            log.info("command_blocked", reason="banned", sender=sender, cmd=cmd)
             log_command(db_conn, sender, cmd, "banned")
             push_event("audit_update", {"node_id": sender, "command": cmd, "status": "banned"})
             return
@@ -334,7 +339,7 @@ def make_receive_handler(
         if cmd in PRIVILEGED_COMMANDS:
             sender_key = node_info.get("user", {}).get("publicKey") if db_conn is not None else None
             if db_conn is None or not is_privileged(db_conn, sender, sender_key):
-                log.info(f"Unprivileged node {sender} attempted privileged command {cmd} — ignoring.")
+                log.info("command_blocked", reason="not_privileged", sender=sender, cmd=cmd)
                 if db_conn is not None:
                     log_command(db_conn, sender, cmd, "not_privileged")
                     push_event("audit_update", {"node_id": sender, "command": cmd, "status": "not_privileged"})
@@ -343,7 +348,11 @@ def make_receive_handler(
         cost = COMMAND_COSTS.get(cmd, 1)
         bucket = _get_tokens(sender)
         if bucket[0] < cost:
-            log.info(f"Rate limit: dropping {cmd} from {sender} (need {cost} tokens, have {bucket[0]:.1f})")
+            log.info(
+                "command_blocked", reason="rate_limited",
+                sender=sender, cmd=cmd,
+                tokens_have=round(bucket[0], 1), tokens_need=cost,
+            )
             if db_conn is not None:
                 log_command(db_conn, sender, cmd, "rate_limited")
                 push_event("audit_update", {"node_id": sender, "command": cmd, "status": "rate_limited"})
@@ -374,7 +383,7 @@ def make_receive_handler(
 def _make_signal_handler(shutdown_event: threading.Event):
     """Return a signal handler that sets *shutdown_event*."""
     def handler(signum, frame):
-        log.info(f"Signal {signum} received — shutting down.")
+        log.info("signal_received", signum=signum)
         shutdown_event.set()
     return handler
 
@@ -386,18 +395,18 @@ def _make_sighup_handler(config_path: str, bot_state: dict):
     If the reloaded config fails validation the existing values are preserved.
     """
     def handler(signum, frame):
-        log.info("SIGHUP received — reloading config…")
+        log.info("sighup_received")
         try:
             cfg = load_config(config_path)
             validate_config(cfg)
         except FileNotFoundError:
-            log.error(f"Config reload failed: file not found: {config_path}")
+            log.error("config_reload_failed", reason="file_not_found", path=config_path)
             return
         except ValueError as exc:
-            log.error(f"Config reload aborted — invalid config: {exc}")
+            log.error("config_reload_failed", reason="invalid_config", error=str(exc))
             return
         except Exception as exc:
-            log.error(f"Config reload failed: {exc}")
+            log.error("config_reload_failed", error=str(exc))
             return
 
         weather_cfg = cfg.get("weather", {})
@@ -413,8 +422,10 @@ def _make_sighup_handler(config_path: str, bot_state: dict):
         bot_state["admin_username"] = str(admin_cfg.get("username", ""))
         bot_state["admin_password"] = str(admin_cfg.get("password", ""))
         log.info(
-            f"Config reloaded — county={bot_state['county']!r}, "
-            f"bucket_size={bot_state['bucket_size']}, refill_rate={bot_state['refill_rate']}"
+            "config_reloaded",
+            county=bot_state["county"],
+            bucket_size=bot_state["bucket_size"],
+            refill_rate=bot_state["refill_rate"],
         )
     return handler
 
@@ -434,7 +445,7 @@ def weather_alert_loop(
         for alert in lightning_alerts:
             if alert["id"] not in sent_lightning_ids:
                 msg = format_alert_message(alert)
-                log.info(f"Sending lightning alert to ch{channel}: {msg}")
+                log.info("weather_alert_sent", kind="lightning", channel=channel, alert_id=alert["id"])
                 send_text_with_retry(interface, msg, channelIndex=channel)
                 sent_lightning_ids.add(alert["id"])
         sent_lightning_ids.intersection_update({a["id"] for a in lightning_alerts})
@@ -443,12 +454,12 @@ def weather_alert_loop(
         for alert in wind_alerts:
             if alert["id"] not in sent_wind_ids:
                 msg = format_wind_alert_message(alert)
-                log.info(f"Sending wind alert to ch{channel}: {msg}")
+                log.info("weather_alert_sent", kind="wind", channel=channel, alert_id=alert["id"])
                 send_text_with_retry(interface, msg, channelIndex=channel)
                 sent_wind_ids.add(alert["id"])
         sent_wind_ids.intersection_update({a["id"] for a in wind_alerts})
 
-    log.info(f"Weather alert task started (county={county}, interval={interval_seconds}s).")
+    log.info("weather_alert_task_started", county=county, interval_s=interval_seconds)
     check_and_send()
     while not shutdown_event.wait(timeout=interval_seconds):
         check_and_send()
@@ -462,7 +473,7 @@ def db_purge_loop(
     """Background thread: purges messages older than *retain_days* once per day."""
     if shutdown_event is None:
         shutdown_event = threading.Event()
-    log.info(f"DB purge task started (retain={retain_days} days, interval={interval_seconds}s).")
+    log.info("db_purge_task_started", retain_days=retain_days, interval_s=interval_seconds)
     purge_old_messages(conn, retain_days)
     while not shutdown_event.wait(timeout=interval_seconds):
         purge_old_messages(conn, retain_days)
@@ -499,13 +510,13 @@ def node_sync_loop(
     """Background thread: periodically syncs interface.nodes → DB."""
     if shutdown_event is None:
         shutdown_event = threading.Event()
-    log.info(f"Node sync task started (interval={interval_seconds}s).")
+    log.info("node_sync_task_started", interval_s=interval_seconds)
     while not shutdown_event.wait(timeout=interval_seconds):
         try:
             n = sync_nodes_from_interface(interface, db_conn)
-            log.debug(f"Node sync: {n} nodes upserted.")
+            log.debug("node_sync_complete", nodes_upserted=n)
         except Exception as exc:
-            log.warning(f"Node sync failed: {exc}")
+            log.warning("node_sync_failed", error=str(exc))
 
 
 def main():
@@ -520,7 +531,7 @@ def main():
     try:
         validate_config(cfg)
     except ValueError as exc:
-        log.error(str(exc))
+        log.error("config_invalid", error=str(exc))
         raise SystemExit(1)
     channel = cfg.get("channel", 2)
     if args.channel is not None:
@@ -532,7 +543,7 @@ def main():
 
     if args.dummy:
         interface = DummyInterface()
-        log.info("Dummy mode active — no device connection.")
+        log.info("dummy_mode_active")
     else:
         interface = connect_with_retry(cfg)
 
@@ -552,7 +563,7 @@ def main():
         ))
         # Populate the node registry from what the interface already knows.
         n = sync_nodes_from_interface(interface, db_conn)
-        log.info(f"Initial node sync: {n} nodes loaded into registry.")
+        log.info("initial_node_sync", nodes=n)
         background_threads.append(threading.Thread(
             target=node_sync_loop,
             args=(interface, db_conn, shutdown_event),
@@ -615,13 +626,13 @@ def main():
         interface.close()
     else:
         pub.subscribe(handler, "meshtastic.receive.text")
-        log.info(f"Bot ready — listening on channel {channel}. Press Ctrl+C to stop.")
+        log.info("bot_ready", channel=channel)
         try:
             while not shutdown_event.is_set():
                 shutdown_event.wait(timeout=1)
                 # Reconnect if the interface has lost connection
                 if getattr(interface, "isConnected", None) is not None and not interface.isConnected:
-                    log.warning("Device disconnected — reconnecting…")
+                    log.warning("device_disconnected")
                     try:
                         pub.unsubscribe(handler, "meshtastic.receive.text")
                     except Exception:
@@ -632,14 +643,14 @@ def main():
                         pass
                     interface = connect_with_retry(cfg)
                     pub.subscribe(handler, "meshtastic.receive.text")
-                    log.info("Reconnected successfully.")
+                    log.info("device_reconnected")
         finally:
-            log.info("Shutting down — waiting for background tasks to finish…")
+            log.info("shutdown_started")
             shutdown_event.set()
             for t in background_threads:
                 t.join(timeout=5)
             interface.close()
-            log.info("Shutdown complete.")
+            log.info("shutdown_complete")
 
 
 if __name__ == "__main__":

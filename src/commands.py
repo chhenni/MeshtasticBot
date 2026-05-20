@@ -9,10 +9,11 @@ privilege gating (PRIVILEGED_COMMANDS), and /help pages are all derived
 from that single source of truth.
 """
 
-import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+
+import structlog
 
 from bandplan import (
     BANDPLAN,
@@ -48,7 +49,7 @@ from weather import (
     get_wind_alerts,
 )
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger()
 
 # ---------------------------------------------------------------------------
 # Command descriptor
@@ -226,7 +227,7 @@ def handle_weather_command(text: str, reply_fn, ctx: BotContext) -> None:
         reply_fn("Ingen GPS-posisjon funnet for din node. Del posisjon og prøv igjen.")
         return
     lat, lon = pos
-    log.info(f"/weather requested by {sender} at ({lat}, {lon})")
+    log.info("command_weather", sender=sender, lat=lat, lon=lon)
     forecast = get_forecast(lat, lon)
     if forecast is None:
         reply_fn("Klarte ikke hente varsel fra yr.no.")
@@ -242,7 +243,7 @@ def handle_24h_command(text: str, reply_fn, ctx: BotContext) -> None:
         reply_fn("Ingen GPS-posisjon funnet for din node. Del posisjon og prøv igjen.")
         return
     lat, lon = pos
-    log.info(f"/24hour requested by {sender} at ({lat}, {lon})")
+    log.info("command_24h", sender=sender, lat=lat, lon=lon)
     forecast = get_forecast_24h(lat, lon)
     if forecast is None:
         reply_fn("Klarte ikke hente varsel fra yr.no.")
@@ -269,7 +270,7 @@ def handle_calling_command(text: str, reply_fn, ctx: BotContext) -> None:
     if band is None or band not in CALLING_FREQUENCIES:
         reply_fn(f"Ukjent bånd '{parts[1]}'.\nTilgjengelig: {', '.join(CALLING_FREQUENCIES.keys())}")
         return
-    log.info(f"/calling {band} requested")
+    log.info("command_calling", band=band)
     _send_pages(reply_fn, format_calling_messages(band))
 
 
@@ -289,7 +290,7 @@ def handle_bandplan_check_command(text: str, reply_fn, ctx: BotContext) -> None:
         return
     band, freq_range, mode = result
     reply_fn(f"{freq_mhz:.4f} MHz → {band}\n{freq_range} MHz\n{mode}")
-    log.info(f"/bandplan_check {freq_mhz} MHz -> {band} {mode}")
+    log.info("command_bandplan_check", freq_mhz=freq_mhz, band=band, mode=mode)
 
 
 def handle_bandplan_command(text: str, reply_fn, ctx: BotContext) -> None:
@@ -302,7 +303,7 @@ def handle_bandplan_command(text: str, reply_fn, ctx: BotContext) -> None:
     if band is None:
         reply_fn(f"Ukjent bånd '{parts[1]}'.\nTilgjengelig: {', '.join(BANDPLAN.keys())}")
         return
-    log.info(f"/bandplan {band} requested")
+    log.info("command_bandplan", band=band)
     _send_pages(reply_fn, format_bandplan_messages(band))
 
 
@@ -377,7 +378,7 @@ def handle_krslog_command(text: str, reply_fn, ctx: BotContext) -> None:
     if not rows:
         reply_fn(f"Ingen meldinger siste {hours}t.")
         return
-    log.info(f"/krslog {hours}h — {len(rows)} message(s)")
+    log.info("command_krslog", hours=hours, rows=len(rows))
     _send_pages(reply_fn, _build_log_pages(rows, f"Logg siste {hours}t:"))
 
 
@@ -405,7 +406,7 @@ def handle_krslast_command(text: str, reply_fn, ctx: BotContext) -> None:
     if not rows:
         reply_fn("Ingen meldinger i loggen.")
         return
-    log.info(f"/krslast {count} — {len(rows)} message(s)")
+    log.info("command_krslast", count=count, rows=len(rows))
     _send_pages(reply_fn, _build_log_pages(rows, f"Siste {len(rows)} meldinger:"))
 
 

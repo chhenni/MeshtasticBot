@@ -2,14 +2,14 @@
 Amateur radio band forecast via the HamQSL solar data API.
 """
 
-import logging
 import xml.etree.ElementTree as ET
 
 import requests
+import structlog
 
 from constants import PACK_BYTES, USER_AGENT
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger()
 
 HAMQSL_URL = "https://www.hamqsl.com/solarxml.php"
 
@@ -33,7 +33,7 @@ def get_radio_forecast() -> dict | None:
         if sd is None:
             return None
     except (requests.RequestException, ET.ParseError) as e:
-        log.error(f"Failed to fetch radio forecast: {e}")
+        log.error("fetch_radio_forecast_failed", error=str(e))
         return None
 
     def txt(tag: str) -> str:
