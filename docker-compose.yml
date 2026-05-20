@@ -4,6 +4,7 @@ services:
   meshtasticbot:
     image: ghcr.io/chhenni/meshtasticbot:latest
     restart: unless-stopped
+    tty: true
     ports:
       - "8082:8080"
     volumes:
