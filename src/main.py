@@ -261,14 +261,14 @@ def make_receive_handler(
         pkt_channel = packet.get("channel", 0)
 
         if is_dm:
-            log.info("message_received", direction="dm", sender=sender)
+            log.info("message_received", direction="dm", sender=sender, text=text)
             def reply_fn(msg, _to=sender):
-                log.info("message_sent", direction="dm", to=_to)
+                log.info("message_sent", direction="dm", to=_to, text=msg)
                 send_text_with_retry(interface, msg, destinationId=_to, channelIndex=0)
         elif pkt_channel == channel:
-            log.info("message_received", direction="channel", channel=channel, sender=sender)
+            log.info("message_received", direction="channel", channel=channel, sender=sender, text=text)
             def reply_fn(msg, _ch=channel, _to=sender):
-                log.info("message_sent", direction="channel", channel=_ch, to=_to)
+                log.info("message_sent", direction="channel", channel=_ch, to=_to, text=msg)
                 send_text_with_retry(interface, msg, channelIndex=_ch)
         else:
             reply_fn = None
