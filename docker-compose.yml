@@ -10,15 +10,9 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - bot_data:/app/data
-    # Serial connection: uncomment and adjust device path
     devices:
-      - /dev/ttyUSB1:/dev/ttyUSB1
-    # BLE connection: uncomment to share host network and D-Bus
-    #network_mode: host
-    #volumes:
-    #  - ./config.yaml:/app/config.yaml:ro
-    #  - /run/dbus:/run/dbus:ro
-    #  - bot_data:/app/data
+      - /dev/meshtastic:/dev/meshtastic   # Meshtastic node (set up udev rule)
+      - /dev/flipper:/dev/flipper         # Flipper Zero (set up udev rule)
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
       interval: 30s
