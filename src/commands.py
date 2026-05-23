@@ -506,7 +506,11 @@ COMMAND_REGISTRY: list[Command] = [
     Command("/krslast",        handle_krslast_command,        "Siste n meldinger  [n]"),
     Command("/addpriv",        handle_addpriv_command,        "Legg til privilegert node  <node_id>", privileged=True),
     Command("/removepriv",     handle_removepriv_command,     "Fjern privilegert node  <node_id>",    privileged=True),
-    Command("/awning",         handle_awning_command,         "Styr markisen  <open|close|stop|lights>", privileged=True),
+    Command(
+        "/awning", handle_awning_command,
+        "Styr markisen  <open|close|stop|lights>",
+        privileged=True,
+    ),
 ]
 
 # Derived dispatch table — includes aliases
