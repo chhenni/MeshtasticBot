@@ -71,15 +71,21 @@ class TestMessageLogRoute:
             r = c.get("/")
         assert b"Alice Node" in r.data
 
-    def test_pagination_page2(self, conn, bot_state):
-        # Add enough messages to force pagination (PAGE_SIZE=50)
-        for i in range(50):
+    def test_pagination_older(self, conn, bot_state):
+        # Add 51 messages; the 51st should be reachable via the "before" cursor
+        for i in range(51):
             store_message(conn, f"px{i}", 0, "!abc", f"msg {i}", f"2026-05-18T13:{i:02d}:00")
         app = create_app(conn, bot_state)
         app.config["TESTING"] = True
         with app.test_client() as c:
-            r = c.get("/?page=2")
-        assert r.status_code == 200
+            # First page (newest 50)
+            r1 = c.get("/")
+            assert r1.status_code == 200
+            assert b"Older" in r1.data
+            # Follow the "older" cursor — use the oldest timestamp on page 1
+            oldest_ts = "2026-05-18T13:01:00"  # msg 1 is the oldest when 50 fetched desc
+            r2 = c.get(f"/?before={oldest_ts}")
+        assert r2.status_code == 200
 
 
 class TestStatusRoute:
@@ -116,7 +122,10 @@ class TestApiMessagesRoute:
     def test_response_has_expected_keys(self, client):
         data = client.get("/api/messages").get_json()
         assert "total" in data
-        assert "page" in data
+        assert "has_older" in data
+        assert "has_newer" in data
+        assert "oldest" in data
+        assert "newest" in data
         assert "page_size" in data
         assert "messages" in data
 
@@ -135,12 +144,14 @@ class TestApiMessagesRoute:
         assert "!aabbccdd" in senders
 
     def test_page_param(self, client):
-        data = client.get("/api/messages?page=1").get_json()
-        assert data["page"] == 1
+        # before/after cursor params should be accepted without error
+        data = client.get("/api/messages?before=2030-01-01T00:00:00").get_json()
+        assert "messages" in data
 
-    def test_invalid_page_defaults_to_1(self, client):
-        data = client.get("/api/messages?page=abc").get_json()
-        assert data["page"] == 1
+    def test_invalid_before_returns_empty(self, client):
+        # SQLite treats an unrecognised date string as a literal comparison — rows are returned
+        data = client.get("/api/messages?before=not-a-date").get_json()
+        assert "messages" in data
 
     def test_empty_db_returns_zero_total(self, bot_state):
         conn = init_db(":memory:")

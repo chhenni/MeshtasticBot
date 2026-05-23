@@ -5,7 +5,6 @@ Started as a daemon thread from main.py when web.enabled is true in config.yaml.
 """
 
 import json
-import math
 import queue
 import threading
 from datetime import datetime, timezone
@@ -84,14 +83,23 @@ def create_app(db_conn, bot_state: dict, admin_username: str = "", admin_passwor
         channel_raw = request.args.get("channel", "")
         date_from = request.args.get("from", "")
         date_to = request.args.get("to", "")
-        try:
-            page = max(1, int(request.args.get("page", 1)))
-        except ValueError:
-            page = 1
+        before = request.args.get("before", "")
+        after = request.args.get("after", "")
 
         channel = int(channel_raw) if channel_raw.lstrip("-").isdigit() else None
-        rows, total = get_messages_page(conn, channel, date_from or None, date_to or None, page, PAGE_SIZE)
-        total_pages = max(1, math.ceil(total / PAGE_SIZE))
+        rows, total = get_messages_page(
+            conn, channel,
+            date_from or None, date_to or None,
+            before=before or None,
+            after=after or None,
+            page_size=PAGE_SIZE,
+        )
+
+        # Cursors for next/prev links — oldest and newest received_at in current page
+        oldest = rows[-1]["received_at"] if rows else None
+        newest = rows[0]["received_at"] if rows else None
+        has_older = len(rows) == PAGE_SIZE
+        has_newer = bool(before or after)
 
         # Distinct channels for the filter dropdown
         try:
@@ -106,8 +114,10 @@ def create_app(db_conn, bot_state: dict, admin_username: str = "", admin_passwor
             "logs.html",
             rows=rows,
             total=total,
-            page=page,
-            total_pages=total_pages,
+            oldest=oldest,
+            newest=newest,
+            has_older=has_older,
+            has_newer=has_newer,
             channel=channel_raw,
             date_from=date_from,
             date_to=date_to,
@@ -178,14 +188,28 @@ def create_app(db_conn, bot_state: dict, admin_username: str = "", admin_passwor
         channel_raw = request.args.get("channel", "")
         date_from = request.args.get("from", "")
         date_to = request.args.get("to", "")
-        try:
-            page = max(1, int(request.args.get("page", 1)))
-        except ValueError:
-            page = 1
+        before = request.args.get("before", "")
+        after = request.args.get("after", "")
 
         channel = int(channel_raw) if channel_raw.lstrip("-").isdigit() else None
-        rows, total = get_messages_page(conn, channel, date_from or None, date_to or None, page, PAGE_SIZE)
-        return jsonify({"total": total, "page": page, "page_size": PAGE_SIZE, "messages": rows})
+        rows, total = get_messages_page(
+            conn, channel,
+            date_from or None, date_to or None,
+            before=before or None,
+            after=after or None,
+            page_size=PAGE_SIZE,
+        )
+        oldest = rows[-1]["received_at"] if rows else None
+        newest = rows[0]["received_at"] if rows else None
+        return jsonify({
+            "total": total,
+            "page_size": PAGE_SIZE,
+            "has_older": len(rows) == PAGE_SIZE,
+            "has_newer": bool(before or after),
+            "oldest": oldest,
+            "newest": newest,
+            "messages": rows,
+        })
 
     @app.route("/health")
     def health():

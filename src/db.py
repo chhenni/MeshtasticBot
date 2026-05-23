@@ -135,10 +135,16 @@ def get_messages_page(
     channel: int | None,
     date_from: str | None,
     date_to: str | None,
-    page: int,
+    before: str | None = None,
+    after: str | None = None,
     page_size: int = 50,
 ) -> tuple[list[dict], int]:
-    """Return a page of messages with optional channel/date filters, and the total count."""
+    """Return a page of messages using keyset pagination.
+
+    *before* / *after* are ISO-8601 ``received_at`` cursors from the previous
+    page.  Pass *before* to go to an older page, *after* to go to a newer one.
+    Also returns the total filtered count for display in the header.
+    """
     conditions = []
     params: list = []
 
@@ -152,25 +158,52 @@ def get_messages_page(
         conditions.append("m.received_at <= ?")
         params.append(date_to + "T23:59:59")
 
+    # Keyset cursors
+    if before:
+        conditions.append("m.received_at < ?")
+        params.append(before)
+    if after:
+        conditions.append("m.received_at > ?")
+        params.append(after)
+
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
-    count_where = ("WHERE " + " AND ".join(c.replace("m.", "") for c in conditions)) if conditions else ""
+
+    # Total uses only the filter conditions (not cursor) for the header count
+    filter_conditions = [c for c in conditions if "< ?" not in c and "> ?" not in c]
+    filter_params = params[: len(filter_conditions)]
+    count_where = ("WHERE " + " AND ".join(c.replace("m.", "") for c in filter_conditions)) if filter_conditions else ""
+
     try:
-        total = conn.execute(f"SELECT COUNT(*) FROM messages {count_where}", params).fetchone()[0]
-        offset = (page - 1) * page_size
-        cur = conn.execute(
-            f"SELECT m.channel, m.sender_id, m.text, m.received_at, "
-            f"n.long_name, n.short_name "
-            f"FROM messages m LEFT JOIN nodes n ON m.sender_id = n.node_id "
-            f"{where} "
-            f"ORDER BY m.received_at DESC LIMIT ? OFFSET ?",
-            params + [page_size, offset],
-        )
+        total = conn.execute(f"SELECT COUNT(*) FROM messages {count_where}", filter_params).fetchone()[0]
+
+        if after:
+            # When paging forward ("newer"), fetch ascending then reverse so newest is first
+            cur = conn.execute(
+                f"SELECT m.channel, m.sender_id, m.text, m.received_at, "
+                f"n.long_name, n.short_name "
+                f"FROM messages m LEFT JOIN nodes n ON m.sender_id = n.node_id "
+                f"{where} "
+                f"ORDER BY m.received_at ASC LIMIT ?",
+                params + [page_size],
+            )
+            rows_raw = list(reversed(cur.fetchall()))
+        else:
+            cur = conn.execute(
+                f"SELECT m.channel, m.sender_id, m.text, m.received_at, "
+                f"n.long_name, n.short_name "
+                f"FROM messages m LEFT JOIN nodes n ON m.sender_id = n.node_id "
+                f"{where} "
+                f"ORDER BY m.received_at DESC LIMIT ?",
+                params + [page_size],
+            )
+            rows_raw = cur.fetchall()
+
         rows = [
             {
                 "channel": r[0], "sender_id": r[1], "text": r[2], "received_at": r[3],
                 "long_name": r[4], "short_name": r[5],
             }
-            for r in cur.fetchall()
+            for r in rows_raw
         ]
         return rows, total
     except sqlite3.Error as exc:
