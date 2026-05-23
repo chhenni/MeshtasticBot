@@ -62,6 +62,9 @@ python main.py
 
 ## Workflow Rules
 
+- **All changes must go through a pull request — never commit directly to `main`.**
+  Work on a feature branch, open a PR, wait for all GitHub Actions CI checks to pass, then merge.
+  Do not consider a task complete until the PR is merged and CI is green.
 - **Use test-driven development (TDD) whenever possible.**
   Write tests before or alongside the implementation, not after. A feature is not done until its tests are written and passing.
 - **After making code changes, always run `ruff check src/ tests/` and fix any issues before committing.**
