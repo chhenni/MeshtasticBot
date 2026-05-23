@@ -447,6 +447,43 @@ def handle_removepriv_command(text: str, reply_fn, ctx: BotContext) -> None:
     reply_fn(f"✅ {name} fjernet fra privilegerte noder.")
 
 
+_AWNING_SUBCOMMANDS = {"open", "close", "stop", "lights"}
+_AWNING_EMOJI = {"open": "⬆️", "close": "⬇️", "stop": "⏹️", "lights": "💡"}
+
+
+def handle_awning_command(text: str, reply_fn, ctx: BotContext) -> None:
+    """Control the awning via Flipper Zero SubGHz. Usage: /awning <open|close|stop|lights>"""
+    from flipper import send_subghz_file
+
+    parts = text.split()
+    if len(parts) < 2 or parts[1].lower() not in _AWNING_SUBCOMMANDS:
+        reply_fn(f"Bruk: /awning <{' | '.join(sorted(_AWNING_SUBCOMMANDS))}>")
+        return
+
+    action = parts[1].lower()
+    flipper_cfg = ctx.get("flipper_cfg")
+
+    if not flipper_cfg:
+        reply_fn("❌ Flipper Zero er ikke konfigurert.")
+        return
+
+    device = flipper_cfg.get("device", "")
+    commands = flipper_cfg.get("commands", {})
+    filepath = commands.get(f"awning_{action}")
+
+    if not filepath:
+        reply_fn(f"❌ Ingen fil konfigurert for 'awning_{action}'.")
+        return
+
+    try:
+        send_subghz_file(device, filepath)
+        emoji = _AWNING_EMOJI.get(action, "✅")
+        reply_fn(f"{emoji} Markise: {action}")
+    except Exception as exc:
+        log.error("awning_command_failed", action=action, error=str(exc))
+        reply_fn(f"❌ Feil ved sending: {exc}")
+
+
 # ---------------------------------------------------------------------------
 # Command registry — single source of truth for dispatch, help, and privileges.
 # To add a command: add a Command entry here. Everything else is derived.
@@ -469,6 +506,7 @@ COMMAND_REGISTRY: list[Command] = [
     Command("/krslast",        handle_krslast_command,        "Siste n meldinger  [n]"),
     Command("/addpriv",        handle_addpriv_command,        "Legg til privilegert node  <node_id>", privileged=True),
     Command("/removepriv",     handle_removepriv_command,     "Fjern privilegert node  <node_id>",    privileged=True),
+    Command("/awning",         handle_awning_command,         "Styr markisen  <open|close|stop|lights>", privileged=True),
 ]
 
 # Derived dispatch table — includes aliases

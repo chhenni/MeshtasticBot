@@ -88,6 +88,7 @@ COMMAND_COSTS: dict[str, int] = {
     "/krslast":        3,
     "/addpriv":        1,
     "/removepriv":     1,
+    "/awning":         1,
 }
 
 CONFIG_FILE = "config.yaml"
@@ -233,6 +234,7 @@ def make_receive_handler(
     rate_limit_seconds: int = 10,  # kept for backwards compat; ignored when bucket params set
     bucket_size: float = 5.0,
     refill_rate: float = 0.1,  # tokens per second (default: 1 token / 10 s)
+    flipper_cfg: dict | None = None,
 ):
     # Token bucket state: sender → [tokens, last_refill_timestamp]
     _buckets: dict[str, list] = {}
@@ -374,6 +376,7 @@ def make_receive_handler(
             "log_channel": log_channel,
             "start_time": bot_state["start_time"] if bot_state else None,
             "county": bot_state["county"] if bot_state else None,
+            "flipper_cfg": flipper_cfg,
         }
         handler(text, reply_fn, ctx)
 
@@ -591,6 +594,12 @@ def main():
 
     bucket_size = float(rl_cfg.get("bucket_size", 5.0))
     refill_rate = float(rl_cfg.get("refill_rate", 0.1))  # tokens/second
+
+    flipper_raw = cfg.get("flipper", {})
+    flipper_cfg = flipper_raw if flipper_raw.get("device") else None
+    if flipper_cfg:
+        log.info("flipper_configured", device=flipper_cfg["device"])
+
     handler = make_receive_handler(
         interface, channel,
         db_conn=db_conn,
@@ -598,6 +607,7 @@ def main():
         bot_state=bot_state,
         bucket_size=bucket_size,
         refill_rate=refill_rate,
+        flipper_cfg=flipper_cfg,
     )
 
     if weather_cfg.get("enabled", True):

@@ -19,6 +19,8 @@ class BotContext(TypedDict):
     log_channel Channel index for the /krslog command, or None.
     start_time  UTC datetime when the bot started, or None.
     county      Norwegian fylkesnummer for weather alerts, or None.
+    flipper_cfg Flipper Zero config dict, or None if not configured.
+                Keys: "device" (str), "commands" (dict[str, str]).
     """
 
     interface: Optional[object]
@@ -27,3 +29,4 @@ class BotContext(TypedDict):
     log_channel: Optional[int]
     start_time: Optional[datetime]
     county: Optional[str]
+    flipper_cfg: Optional[dict]
