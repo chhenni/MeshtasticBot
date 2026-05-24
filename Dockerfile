@@ -29,6 +29,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY --from=builder /app/src/ src/
+COPY --from=builder /app/pyproject.toml .
 
 # Mount config.yaml at runtime via -v ./config.yaml:/app/config.yaml
 # Serial: pass device with --device /dev/ttyUSB0
