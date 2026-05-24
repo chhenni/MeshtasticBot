@@ -91,6 +91,8 @@ jobs:
           # Push only when we have registry credentials (not fork PRs)
           push: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            APP_VERSION=${{ steps.gitversion.outputs.semVer }}
           labels: |
             org.opencontainers.image.title=MeshtasticBot
             org.opencontainers.image.description=Meshtastic LoRa mesh network bot

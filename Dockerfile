@@ -31,6 +31,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --from=builder /app/src/ src/
 COPY --from=builder /app/pyproject.toml .
 
+# APP_VERSION is injected by CI (GitVersion semver); falls back to pyproject.toml in dev.
+ARG APP_VERSION
+ENV APP_VERSION=${APP_VERSION}
+
 # Mount config.yaml at runtime via -v ./config.yaml:/app/config.yaml
 # Serial: pass device with --device /dev/ttyUSB0
 # TCP:    no extra flags needed
