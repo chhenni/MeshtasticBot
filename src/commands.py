@@ -37,6 +37,7 @@ from db import (
 )
 from marine import format_mvhf_channel, format_mvhf_list_messages
 from radio import format_radio_messages, get_radio_forecast
+from version import VERSION_STRING
 from weather import (
     format_alert_message,
     format_forecast_24h_messages,
@@ -132,6 +133,11 @@ def _build_log_pages(rows: list[dict], header: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # Command handlers  —  signature: (text, reply_fn, ctx)
 # ---------------------------------------------------------------------------
+
+def handle_version_command(text: str, reply_fn, ctx: BotContext) -> None:
+    """Reply with the current bot version."""
+    reply_fn(f"🤖 MeshtasticBot {VERSION_STRING}")
+
 
 def handle_ping_command(text: str, reply_fn, ctx: BotContext) -> None:
     """Reply with uptime and number of nodes currently seen on the mesh."""
@@ -491,6 +497,7 @@ def handle_awning_command(text: str, reply_fn, ctx: BotContext) -> None:
 
 COMMAND_REGISTRY: list[Command] = [
     Command("/help",           handle_help_command,           "Vis hjelp"),
+    Command("/version",        handle_version_command,        "Vis versjonsinformasjon"),
     Command("/ping",           handle_ping_command,           "Status og oppetid"),
     Command("/nodes",          handle_nodes_command,          "Vis noder på meshet"),
     Command("/weather",        handle_weather_command,        "7-dagers varsel (GPS)"),
