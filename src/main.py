@@ -33,6 +33,7 @@ from db import (
 )
 from dummy import DummyInterface, run_dummy_loop
 from log_config import configure_logging
+from version import VERSION_STRING
 from weather import (
     format_alert_message,
     format_wind_alert_message,
@@ -72,6 +73,7 @@ def send_text_with_retry(interface, text: str, max_attempts: int = 5, base_delay
 # Token cost per command — higher cost = more messages generated = fewer bursts allowed.
 COMMAND_COSTS: dict[str, int] = {
     "/ping":           1,
+    "/version":        1,
     "/help":           1,
     "/whois":          1,
     "/nodes":          2,
@@ -544,6 +546,8 @@ def main():
     parser.add_argument("--channel", type=int, default=None,
                         help="Override the channel index from config.yaml (dummy mode only)")
     args = parser.parse_args()
+
+    log.info("starting", version=VERSION_STRING)
 
     cfg = load_config(CONFIG_FILE)
     try:
