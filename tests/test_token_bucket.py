@@ -11,10 +11,13 @@ The token bucket replaces the simple cooldown with a cost-based system:
 - Commands that exceed the available tokens are silently dropped
 """
 
+import itertools
 import time
 from unittest.mock import MagicMock, patch
 
 from main import COMMAND_COSTS, make_receive_handler
+
+_pkt_counter = itertools.count(1)
 
 
 def make_packet(text: str, sender: str = "!abc", channel: int = 1) -> dict:
@@ -23,7 +26,7 @@ def make_packet(text: str, sender: str = "!abc", channel: int = 1) -> dict:
         "fromId": sender,
         "toId": "^all",
         "channel": channel,
-        "id": "pkt-tb",
+        "id": next(_pkt_counter),  # unique per call so dedup doesn't interfere
     }
 
 
