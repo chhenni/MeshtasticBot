@@ -240,6 +240,10 @@ def make_receive_handler(
     _buckets: dict[str, list] = {}
     # Senders who have already received a rate-limit warning (cleared on next success)
     _warned: set[str] = set()
+    # Recently seen packet IDs — prevents duplicate processing when the same
+    # packet is relayed by multiple mesh nodes (capped to avoid unbounded growth)
+    _seen_ids: set[str] = set()
+    _SEEN_IDS_MAX = 500
 
     def _get_tokens(sender: str) -> list:
         if sender not in _buckets:
@@ -256,6 +260,17 @@ def make_receive_handler(
         text = decoded.get("text", "").strip()
         if not text:
             return
+
+        # Deduplicate by packet ID — same packet may arrive via multiple relay hops
+        raw_pkt_id = packet.get("id")
+        if raw_pkt_id is not None:
+            pkt_key = str(raw_pkt_id)
+            if pkt_key in _seen_ids:
+                log.debug("packet_duplicate_skipped", packet_id=pkt_key)
+                return
+            if len(_seen_ids) >= _SEEN_IDS_MAX:
+                _seen_ids.clear()
+            _seen_ids.add(pkt_key)
 
         sender = packet.get("fromId", "unknown")
         to_id = packet.get("toId", "^all")

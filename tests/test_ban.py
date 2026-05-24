@@ -2,12 +2,15 @@
 Tests for the ban system — DB layer and integration with make_receive_handler.
 """
 
+import itertools
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from db import ban_node, get_banned_nodes, init_db, is_banned, unban_node
 from main import make_receive_handler
+
+_pkt_counter = itertools.count(1)
 
 
 @pytest.fixture
@@ -63,7 +66,7 @@ class TestBanIntegration:
     """Banned nodes are silently ignored in make_receive_handler."""
 
     def make_packet(self, text="/ ping", sender="!bad"):
-        return {"decoded": {"text": text}, "fromId": sender, "toId": "^all", "channel": 1, "id": "p1"}
+        return {"decoded": {"text": text}, "fromId": sender, "toId": "^all", "channel": 1, "id": next(_pkt_counter)}
 
     def test_banned_node_command_is_ignored(self, conn):
         ban_node(conn, "!bad")
