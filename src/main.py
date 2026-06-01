@@ -603,6 +603,10 @@ def main():
         "admin_username": str(cfg.get("admin", {}).get("username", "")),
         "admin_password": str(cfg.get("admin", {}).get("password", "")),
         "connected": not args.dummy,
+        # The interface is stored so the web UI can send messages directly.
+        # Updated in-place on reconnect so the web UI always uses the live interface.
+        "interface": interface,
+        "send_fn": send_text_with_retry,
     }
 
     signal.signal(signal.SIGHUP, _make_sighup_handler(CONFIG_FILE, bot_state))
@@ -667,6 +671,7 @@ def main():
                     except Exception:
                         pass
                     interface = connect_with_retry(cfg)
+                    bot_state["interface"] = interface
                     pub.subscribe(handler, "meshtastic.receive.text")
                     log.info("device_reconnected")
         finally:
