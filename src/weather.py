@@ -356,8 +356,28 @@ def get_lightning_alerts(county: str) -> list[dict]:
     return result
 
 
-def format_alert_message(alert: dict) -> str:
-    """Format an alert into a short Meshtastic-friendly message (<200 chars)."""
+def _alert_pages(full_text: str) -> list[str]:
+    """Word-wrap full_text into a list of MAX_BYTES-safe pages."""
+    if len(full_text.encode("utf-8")) <= MAX_BYTES:
+        return [full_text]
+    words = full_text.split()
+    pages: list[str] = []
+    current = ""
+    for word in words:
+        candidate = (current + " " + word).strip()
+        if len(candidate.encode("utf-8")) > MAX_BYTES:
+            if current:
+                pages.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        pages.append(current)
+    return pages
+
+
+def format_alert_message(alert: dict) -> list[str]:
+    """Format a lightning alert into one or more Meshtastic-safe messages."""
     severity = alert["severity"].upper() if alert["severity"] else ""
     area = alert["area"]
     description = alert["description"]
@@ -370,11 +390,8 @@ def format_alert_message(alert: dict) -> str:
         except ValueError:
             pass
 
-    msg = f"⚡ LYN-VARSEL [{severity}]: {area}. {description}{valid_until}"
-    encoded = msg.encode("utf-8")
-    if len(encoded) > MAX_BYTES:
-        msg = encoded[:MAX_BYTES - 3].decode("utf-8", errors="ignore") + "..."
-    return msg
+    full = f"⚡ LYN-VARSEL [{severity}]: {area}. {description}{valid_until}"
+    return _alert_pages(full)
 
 
 # ---------------------------------------------------------------------------
@@ -415,8 +432,8 @@ def get_wind_alerts(county: str) -> list[dict]:
     return result
 
 
-def format_wind_alert_message(alert: dict) -> str:
-    """Format a wind alert into a short Meshtastic-friendly message (<200 chars)."""
+def format_wind_alert_message(alert: dict) -> list[str]:
+    """Format a wind alert into one or more Meshtastic-safe messages."""
     severity = alert["severity"].upper() if alert["severity"] else ""
     area = alert["area"]
     description = alert["description"]
@@ -429,8 +446,5 @@ def format_wind_alert_message(alert: dict) -> str:
         except ValueError:
             pass
 
-    msg = f"💨 VINDVARSEL [{severity}]: {area}. {description}{valid_until}"
-    encoded = msg.encode("utf-8")
-    if len(encoded) > MAX_BYTES:
-        msg = encoded[:MAX_BYTES - 3].decode("utf-8", errors="ignore") + "..."
-    return msg
+    full = f"💨 VINDVARSEL [{severity}]: {area}. {description}{valid_until}"
+    return _alert_pages(full)

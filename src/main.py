@@ -464,18 +464,24 @@ def weather_alert_loop(
         lightning_alerts = get_lightning_alerts(county)
         for alert in lightning_alerts:
             if alert["id"] not in sent_lightning_ids:
-                msg = format_alert_message(alert)
+                pages = format_alert_message(alert)
                 log.info("weather_alert_sent", kind="lightning", channel=channel, alert_id=alert["id"])
-                send_text_with_retry(interface, msg, channelIndex=channel)
+                for i, page in enumerate(pages):
+                    if i > 0:
+                        time.sleep(3)
+                    send_text_with_retry(interface, page, channelIndex=channel)
                 sent_lightning_ids.add(alert["id"])
         sent_lightning_ids.intersection_update({a["id"] for a in lightning_alerts})
 
         wind_alerts = get_wind_alerts(county)
         for alert in wind_alerts:
             if alert["id"] not in sent_wind_ids:
-                msg = format_wind_alert_message(alert)
+                pages = format_wind_alert_message(alert)
                 log.info("weather_alert_sent", kind="wind", channel=channel, alert_id=alert["id"])
-                send_text_with_retry(interface, msg, channelIndex=channel)
+                for i, page in enumerate(pages):
+                    if i > 0:
+                        time.sleep(3)
+                    send_text_with_retry(interface, page, channelIndex=channel)
                 sent_wind_ids.add(alert["id"])
         sent_wind_ids.intersection_update({a["id"] for a in wind_alerts})
 
@@ -607,6 +613,10 @@ def main():
         "admin_username": str(cfg.get("admin", {}).get("username", "")),
         "admin_password": str(cfg.get("admin", {}).get("password", "")),
         "connected": not args.dummy,
+        # The interface is stored so the web UI can send messages directly.
+        # Updated in-place on reconnect so the web UI always uses the live interface.
+        "interface": interface,
+        "send_fn": send_text_with_retry,
     }
 
     signal.signal(signal.SIGHUP, _make_sighup_handler(CONFIG_FILE, bot_state))
@@ -671,6 +681,7 @@ def main():
                     except Exception:
                         pass
                     interface = connect_with_retry(cfg)
+                    bot_state["interface"] = interface
                     pub.subscribe(handler, "meshtastic.receive.text")
                     log.info("device_reconnected")
         finally:

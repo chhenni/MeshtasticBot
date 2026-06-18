@@ -298,6 +298,105 @@ def create_app(db_conn, bot_state: dict, admin_username: str = "", admin_passwor
             push_event("privilege_update", {"action": "remove", "node_id": node_id})
         return redirect("/admin/privileged")
 
+    @app.route("/admin/send", methods=["GET"])
+    @require_admin
+    def admin_send():
+        conn = app.config["db_conn"]
+        channel_raw = request.args.get("channel", "")
+        node_id = request.args.get("node", "").strip()
+        flash_msg = request.args.get("flash", "")
+        flash_type = request.args.get("flash_type", "success")
+
+        channel = int(channel_raw) if channel_raw.lstrip("-").isdigit() else None
+        all_nodes = get_all_nodes(conn) if conn else []
+
+        # Fetch recent history for the selected context
+        history = []
+        if channel is not None and conn:
+            history, _ = get_messages_page(conn, channel, None, None, page_size=50)
+            history = list(reversed(history))  # chronological order for display
+        elif node_id and conn:
+            history, _ = get_messages_page(conn, -1, None, None, page_size=50, sender_id=node_id)
+            history = list(reversed(history))
+
+        return render_template(
+            "send.html",
+            channel=channel_raw,
+            node_id=node_id,
+            all_nodes=all_nodes,
+            history=history,
+            flash_msg=flash_msg,
+            flash_type=flash_type,
+        )
+
+    @app.route("/admin/send", methods=["POST"])
+    @require_admin
+    def admin_send_post():
+        state = app.config["bot_state"]
+        text = request.form.get("text", "").strip()
+        target_type = request.form.get("target_type", "channel")
+        channel_raw = request.form.get("channel_index", "0").strip()
+        dest_node = request.form.get("destination_id", "").strip()
+
+        if not text:
+            return Response("Missing message text.", 400)
+
+        send_fn = state.get("send_fn")
+        interface = state.get("interface")
+        if send_fn is None or interface is None:
+            return redirect(url_for("admin_send") + "?flash=Bot+interface+not+available&flash_type=danger")
+
+        try:
+            if target_type == "node" and dest_node:
+                send_fn(interface, text, destinationId=dest_node, channelIndex=0)
+                log.info("web_send", direction="dm", to=dest_node, text=text)
+                base = url_for("admin_send")
+                return redirect(f"{base}?node={dest_node}&flash=DM+sent+to+{dest_node}&flash_type=success")
+            else:
+                channel_index = int(channel_raw) if channel_raw.lstrip("-").isdigit() else 0
+                send_fn(interface, text, channelIndex=channel_index)
+                log.info("web_send", direction="channel", channel=channel_index, text=text)
+                base = url_for("admin_send")
+                return redirect(
+                    f"{base}?channel={channel_index}"
+                    f"&flash=Message+sent+to+channel+{channel_index}&flash_type=success"
+                )
+        except Exception as exc:
+            log.error("web_send_failed", error=str(exc))
+            return redirect(url_for("admin_send") + f"?flash=Send+failed:+{str(exc)[:80]}&flash_type=danger")
+
+    @app.route("/api/send", methods=["POST"])
+    @require_admin
+    def api_send():
+        state = app.config["bot_state"]
+        data = request.get_json(silent=True) or {}
+        text = (data.get("text") or "").strip()
+        channel_index = data.get("channel")
+        destination_id = (data.get("destination_id") or "").strip()
+
+        if not text:
+            return jsonify({"error": "Missing text"}), 400
+
+        send_fn = state.get("send_fn")
+        interface = state.get("interface")
+        if send_fn is None or interface is None:
+            return jsonify({"error": "Bot interface not available"}), 503
+
+        try:
+            if destination_id:
+                send_fn(interface, text, destinationId=destination_id, channelIndex=0)
+                log.info("web_api_send", direction="dm", to=destination_id, text=text)
+                return jsonify({"status": "sent", "direction": "dm", "destination_id": destination_id})
+            elif channel_index is not None:
+                send_fn(interface, text, channelIndex=int(channel_index))
+                log.info("web_api_send", direction="channel", channel=channel_index, text=text)
+                return jsonify({"status": "sent", "direction": "channel", "channel": channel_index})
+            else:
+                return jsonify({"error": "Provide either channel or destination_id"}), 400
+        except Exception as exc:
+            log.error("web_api_send_failed", error=str(exc))
+            return jsonify({"error": str(exc)}), 500
+
     return app
 
 

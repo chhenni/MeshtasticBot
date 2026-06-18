@@ -138,12 +138,16 @@ def get_messages_page(
     before: str | None = None,
     after: str | None = None,
     page_size: int = 50,
+    sender_id: str | None = None,
 ) -> tuple[list[dict], int]:
     """Return a page of messages using keyset pagination.
 
     *before* / *after* are ISO-8601 ``received_at`` cursors from the previous
     page.  Pass *before* to go to an older page, *after* to go to a newer one.
     Also returns the total filtered count for display in the header.
+
+    *sender_id* optionally restricts results to a specific sender (useful for
+    fetching DM history with a particular node via ``channel=-1``).
     """
     conditions = []
     params: list = []
@@ -151,6 +155,9 @@ def get_messages_page(
     if channel is not None:
         conditions.append("m.channel = ?")
         params.append(channel)
+    if sender_id is not None:
+        conditions.append("m.sender_id = ?")
+        params.append(sender_id)
     if date_from:
         conditions.append("m.received_at >= ?")
         params.append(date_from)

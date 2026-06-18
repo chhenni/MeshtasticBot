@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Send Message — MeshtasticBot{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Send Message ✉️</h4>
+</div>
+
+{% if flash_msg %}
+<div class="alert alert-{{ flash_type }} alert-dismissible fade show" role="alert">
+  {{ flash_msg }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+{# ── Compose form ─────────────────────────────────────────────────────────── #}
+<div class="card mb-4">
+  <div class="card-body">
+    <form method="post" action="/admin/send" id="compose-form">
+
+      {# Target type toggle #}
+      <div class="mb-3">
+        <div class="btn-group" role="group">
+          <input type="radio" class="btn-check" name="target_type" id="tt-channel" value="channel"
+                 {% if not node_id %}checked{% endif %} autocomplete="off">
+          <label class="btn btn-outline-primary btn-sm" for="tt-channel">📢 Channel</label>
+
+          <input type="radio" class="btn-check" name="target_type" id="tt-node" value="node"
+                 {% if node_id %}checked{% endif %} autocomplete="off">
+          <label class="btn btn-outline-secondary btn-sm" for="tt-node">💬 Direct Message</label>
+        </div>
+      </div>
+
+      {# Channel selector #}
+      <div id="channel-fields" class="mb-3 {% if node_id %}d-none{% endif %}">
+        <label class="form-label small text-muted mb-1">Channel Index</label>
+        <input type="number" name="channel_index" id="channel-index"
+               class="form-control form-control-sm" style="max-width:120px"
+               min="0" max="7" value="{{ channel or 0 }}" placeholder="0">
+      </div>
+
+      {# Node selector #}
+      <div id="node-fields" class="mb-3 {% if not node_id %}d-none{% endif %}">
+        <label class="form-label small text-muted mb-1">Destination Node</label>
+        <input type="text" name="destination_id" id="dest-node"
+               class="form-control form-control-sm font-monospace"
+               list="send-known-nodes" placeholder="!abcdef12"
+               value="{{ node_id }}" style="max-width:320px">
+        <datalist id="send-known-nodes">
+          {% for n in all_nodes %}
+          <option value="{{ n.node_id }}">{{ n.long_name or n.short_name or n.node_id }}</option>
+          {% endfor %}
+        </datalist>
+      </div>
+
+      {# Message text #}
+      <div class="mb-3">
+        <label class="form-label small text-muted mb-1">Message</label>
+        <textarea name="text" id="msg-text" class="form-control form-control-sm font-monospace"
+                  rows="3" maxlength="228" placeholder="Type your message…" required></textarea>
+        <div class="form-text text-end">
+          <span id="char-count">0</span> / 228 bytes
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-sm">Send ✉️</button>
+    </form>
+  </div>
+</div>
+
+{# ── Message history ──────────────────────────────────────────────────────── #}
+{% if history %}
+<h6 class="text-muted mb-2">
+  {% if node_id %}
+    Recent messages from <code>{{ node_id }}</code>
+  {% else %}
+    Recent messages on channel {{ channel }}
+  {% endif %}
+  <span class="badge bg-secondary ms-1">{{ history|length }}</span>
+</h6>
+<div class="table-responsive">
+  <table class="table table-sm table-hover">
+    <thead class="table-dark">
+      <tr>
+        <th style="width:160px">Time (UTC)</th>
+        <th style="width:60px">Ch</th>
+        <th>From</th>
+        <th>Message</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in history %}
+      <tr>
+        <td class="text-nowrap text-muted small font-monospace">
+          {{ (m.received_at or '')[:19].replace('T', ' ') }}
+        </td>
+        <td class="text-muted small">{{ m.channel if m.channel != -1 else 'DM' }}</td>
+        <td class="font-monospace small">
+          {% if m.long_name %}
+            {{ m.long_name }}
+            <span class="text-muted d-block" style="font-size:0.75em">{{ m.sender_id }}</span>
+          {% elif m.short_name %}
+            {{ m.short_name }}
+            <span class="text-muted d-block" style="font-size:0.75em">{{ m.sender_id }}</span>
+          {% else %}
+            {{ m.sender_id }}
+          {% endif %}
+        </td>
+        <td>{{ m.text }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% elif channel != '' or node_id %}
+<p class="text-muted small">No messages found for this context.</p>
+{% endif %}
+
+<script>
+(function () {
+  // Show/hide channel vs node fields based on target type toggle
+  const ttChannel = document.getElementById('tt-channel');
+  const ttNode    = document.getElementById('tt-node');
+  const chFields  = document.getElementById('channel-fields');
+  const ndFields  = document.getElementById('node-fields');
+
+  function updateFields() {
+    if (ttNode.checked) {
+      chFields.classList.add('d-none');
+      ndFields.classList.remove('d-none');
+    } else {
+      ndFields.classList.add('d-none');
+      chFields.classList.remove('d-none');
+    }
+  }
+  ttChannel.addEventListener('change', updateFields);
+  ttNode.addEventListener('change', updateFields);
+
+  // Byte counter (UTF-8 aware)
+  const textarea = document.getElementById('msg-text');
+  const counter  = document.getElementById('char-count');
+  function updateCount() {
+    const bytes = new TextEncoder().encode(textarea.value).length;
+    counter.textContent = bytes;
+    counter.className = bytes > 228 ? 'text-danger fw-bold' : (bytes > 200 ? 'text-warning' : '');
+  }
+  textarea.addEventListener('input', updateCount);
+
+  // After submit, reload page with channel/node context so history updates
+  document.getElementById('compose-form').addEventListener('submit', function () {
+    const isNode = ttNode.checked;
+    const dest   = document.getElementById('dest-node').value.trim();
+    const ch     = document.getElementById('channel-index').value.trim();
+    // The form POST handler will redirect back with context — no JS override needed.
+  });
+})();
+</script>
+
+{% endblock %}
