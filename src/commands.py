@@ -202,9 +202,9 @@ def handle_alert_command(text: str, reply_fn, ctx: BotContext) -> None:
     pages = []
     for alert, kind in all_alerts:
         if kind == "lightning":
-            pages.append(format_alert_message(alert))
+            pages.extend(format_alert_message(alert))
         else:
-            pages.append(format_wind_alert_message(alert))
+            pages.extend(format_wind_alert_message(alert))
     _send_pages(reply_fn, pages)
 
 

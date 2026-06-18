@@ -462,18 +462,24 @@ def weather_alert_loop(
         lightning_alerts = get_lightning_alerts(county)
         for alert in lightning_alerts:
             if alert["id"] not in sent_lightning_ids:
-                msg = format_alert_message(alert)
+                pages = format_alert_message(alert)
                 log.info("weather_alert_sent", kind="lightning", channel=channel, alert_id=alert["id"])
-                send_text_with_retry(interface, msg, channelIndex=channel)
+                for i, page in enumerate(pages):
+                    if i > 0:
+                        time.sleep(3)
+                    send_text_with_retry(interface, page, channelIndex=channel)
                 sent_lightning_ids.add(alert["id"])
         sent_lightning_ids.intersection_update({a["id"] for a in lightning_alerts})
 
         wind_alerts = get_wind_alerts(county)
         for alert in wind_alerts:
             if alert["id"] not in sent_wind_ids:
-                msg = format_wind_alert_message(alert)
+                pages = format_wind_alert_message(alert)
                 log.info("weather_alert_sent", kind="wind", channel=channel, alert_id=alert["id"])
-                send_text_with_retry(interface, msg, channelIndex=channel)
+                for i, page in enumerate(pages):
+                    if i > 0:
+                        time.sleep(3)
+                    send_text_with_retry(interface, page, channelIndex=channel)
                 sent_wind_ids.add(alert["id"])
         sent_wind_ids.intersection_update({a["id"] for a in wind_alerts})
 

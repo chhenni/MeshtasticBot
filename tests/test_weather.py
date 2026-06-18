@@ -134,40 +134,76 @@ def sample_alert():
 
 
 class TestFormatAlertMessage:
+    def test_returns_list(self, sample_alert):
+        assert isinstance(format_alert_message(sample_alert), list)
+
     def test_within_byte_limit(self, sample_alert):
-        assert len(format_alert_message(sample_alert).encode("utf-8")) <= MAX_BYTES
+        for page in format_alert_message(sample_alert):
+            assert len(page.encode("utf-8")) <= MAX_BYTES
 
     def test_contains_severity(self, sample_alert):
-        assert "MODERATE" in format_alert_message(sample_alert)
+        full = " ".join(format_alert_message(sample_alert))
+        assert "MODERATE" in full
 
     def test_contains_area(self, sample_alert):
-        assert "Agder" in format_alert_message(sample_alert)
+        full = " ".join(format_alert_message(sample_alert))
+        assert "Agder" in full
 
     def test_lightning_prefix(self, sample_alert):
-        assert format_alert_message(sample_alert).startswith("⚡")
+        assert format_alert_message(sample_alert)[0].startswith("⚡")
 
     def test_no_valid_until(self, sample_alert):
         sample_alert["valid_until"] = None
-        msg = format_alert_message(sample_alert)
-        assert "Gjelder til" not in msg
+        full = " ".join(format_alert_message(sample_alert))
+        assert "Gjelder til" not in full
 
-    def test_very_long_message_truncated(self):
+    def test_long_description_not_truncated(self):
+        long_desc = "Dette er en veldig lang beskrivelse av farevarsel. " * 10
         alert = {
             "id": "x",
-            "description": "X" * 300,
-            "area": "SomeLongAreaName",
+            "description": long_desc,
+            "area": "Agder",
             "severity": "Extreme",
             "valid_until": None,
         }
-        assert len(format_alert_message(alert).encode("utf-8")) <= MAX_BYTES
+        pages = format_alert_message(alert)
+        full = " ".join(pages)
+        assert "..." not in full
+        assert long_desc.strip() in full
+        for page in pages:
+            assert len(page.encode("utf-8")) <= MAX_BYTES
+
+    def test_short_message_is_single_page(self, sample_alert):
+        pages = format_alert_message(sample_alert)
+        assert len(pages) == 1
 
 
 class TestFormatWindAlertMessage:
+    def test_returns_list(self, sample_alert):
+        assert isinstance(format_wind_alert_message(sample_alert), list)
+
     def test_within_byte_limit(self, sample_alert):
-        assert len(format_wind_alert_message(sample_alert).encode("utf-8")) <= MAX_BYTES
+        for page in format_wind_alert_message(sample_alert):
+            assert len(page.encode("utf-8")) <= MAX_BYTES
 
     def test_wind_prefix(self, sample_alert):
-        assert format_wind_alert_message(sample_alert).startswith("💨")
+        assert format_wind_alert_message(sample_alert)[0].startswith("💨")
+
+    def test_long_description_not_truncated(self):
+        long_desc = "Svært sterk storm med ekstreme vindkast langs kysten. " * 8
+        alert = {
+            "id": "y",
+            "description": long_desc,
+            "area": "Vestland",
+            "severity": "Extreme",
+            "valid_until": None,
+        }
+        pages = format_wind_alert_message(alert)
+        full = " ".join(pages)
+        assert "..." not in full
+        assert long_desc.strip() in full
+        for page in pages:
+            assert len(page.encode("utf-8")) <= MAX_BYTES
 
 
 # ---------------------------------------------------------------------------
