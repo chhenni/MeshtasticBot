@@ -11,8 +11,8 @@ services:
       - ./config.yaml:/app/config.yaml:ro
       - bot_data:/app/data
     devices:
-      - /dev/meshtastic:/dev/meshtastic   # Meshtastic node (set up udev rule)
-      - /dev/flipper:/dev/flipper         # Flipper Zero (set up udev rule)
+      - /dev/ttyUSB1:/dev/meshtastic   # Meshtastic node (set up udev rule)
+      - /dev/ttyACM1:/dev/flipper         # Flipper Zero (set up udev rule)
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
       interval: 30s

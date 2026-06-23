@@ -203,3 +203,29 @@ class TestApiCommandPrivileged:
         assert resp.status_code == 200
         data = resp.get_json()
         assert isinstance(data["replies"], list)
+
+
+class TestApiCommandFlipperSleepIsolation:
+    def test_flipper_time_sleep_is_not_patched(self):
+        """patch('commands.time') must NOT affect flipper.time.sleep.
+
+        If commands.time.sleep were patched globally, the serial drain
+        wait in send_subghz_file would be skipped, causing the Flipper
+        to miss the command (returns success reply but nothing happens).
+        """
+        import time as real_time
+
+        import flipper
+
+        # After the patch context exits, flipper.time.sleep should
+        # still be the real function — verify it was never replaced.
+        original = flipper.time.sleep
+        with patch("commands.time"):
+            # Inside the patch, commands.time is a Mock, but
+            # flipper.time must still be the real time module.
+            assert flipper.time.sleep is real_time.sleep, (
+                "flipper.time.sleep was replaced by the patch — "
+                "this would break Flipper serial timing!"
+            )
+        # And after the context, everything is still real.
+        assert flipper.time.sleep is original

@@ -50,10 +50,10 @@ rate_limit:
 
 # Flipper Zero — SubGHz remote control via USB serial (privileged commands only)
 # Uncomment and set device path + file paths for your saved .sub files.
-# flipper:
-#   device: /dev/flipper
-#   commands:
-#     awning_open:   /ext/subghz/awning_open.sub
-#     awning_close:  /ext/subghz/awning_close.sub
-#     awning_stop:   /ext/subghz/awning_stop.sub
-#     awning_lights: /ext/subghz/awning_lights.sub
+flipper:
+  device: /dev/flipper
+  commands:
+    awning_open:   /ext/subghz/awning_open.sub
+    awning_close:  /ext/subghz/awning_close.sub
+    awning_stop:   /ext/subghz/awning_stop.sub
+    awning_lights: /ext/subghz/awning_lights.sub

@@ -438,7 +438,7 @@ def create_app(db_conn, bot_state: dict, admin_username: str = "", admin_passwor
         }
 
         replies: list[str] = []
-        with patch("commands.time.sleep"):
+        with patch("commands.time"):
             handler(text, replies.append, ctx)
 
         return jsonify({"command": text, "replies": replies})
