@@ -9,6 +9,7 @@ import queue
 import threading
 from datetime import datetime, timezone
 from functools import wraps
+from unittest.mock import patch
 
 import structlog
 from flask import Flask, Response, jsonify, redirect, render_template, request, url_for
@@ -396,6 +397,51 @@ def create_app(db_conn, bot_state: dict, admin_username: str = "", admin_passwor
         except Exception as exc:
             log.error("web_api_send_failed", error=str(exc))
             return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/command", methods=["POST"])
+    @require_admin
+    def api_command():
+        from commands import COMMANDS
+
+        data = request.get_json(silent=True) or {}
+        text = (data.get("command") or "").strip()
+        lat = data.get("lat")
+        lon = data.get("lon")
+
+        if not text:
+            return jsonify({"error": "Missing command"}), 400
+
+        cmd_name = text.split()[0].lower()
+        handler = COMMANDS.get(cmd_name)
+        if not handler:
+            return jsonify({"error": f"Unknown command: {cmd_name}"}), 400
+
+        position = None
+        if lat is not None and lon is not None:
+            try:
+                position = (float(lat), float(lon))
+            except (TypeError, ValueError):
+                return jsonify({"error": "lat and lon must be numbers"}), 400
+
+        state = app.config["bot_state"]
+        conn = app.config["db_conn"]
+
+        ctx = {
+            "interface": state.get("interface"),
+            "sender": "!api-admin",
+            "db_conn": conn,
+            "log_channel": state.get("log_channel"),
+            "start_time": state.get("start_time"),
+            "county": state.get("county"),
+            "flipper_cfg": state.get("flipper_cfg"),
+            "position": position,
+        }
+
+        replies: list[str] = []
+        with patch("commands.time.sleep"):
+            handler(text, replies.append, ctx)
+
+        return jsonify({"command": text, "replies": replies})
 
     return app
 

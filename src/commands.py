@@ -150,13 +150,13 @@ def handle_ping_command(text: str, reply_fn, ctx: BotContext) -> None:
     else:
         uptime = "ukjent"
 
-    nodes = ctx["interface"].nodes or {}
+    nodes = (ctx["interface"].nodes if ctx.get("interface") else None) or {}
     reply_fn(f"🟢 Pong! Oppe: {uptime} | Noder sett: {len(nodes)}")
 
 
 def handle_nodes_command(text: str, reply_fn, ctx: BotContext) -> None:
     """List mesh nodes currently seen by the interface with SNR."""
-    nodes: dict = ctx["interface"].nodes or {}
+    nodes: dict = (ctx["interface"].nodes if ctx.get("interface") else None) or {}
     if not nodes:
         reply_fn("Ingen noder sett ennå.")
         return
@@ -228,7 +228,7 @@ def handle_help_command(text: str, reply_fn, ctx: BotContext) -> None:
 def handle_weather_command(text: str, reply_fn, ctx: BotContext) -> None:
     """Look up sender position, fetch 7-day forecast, send multi-message reply."""
     interface, sender = ctx["interface"], ctx["sender"]
-    pos = get_node_position(interface, sender)
+    pos = ctx.get("position") or get_node_position(interface, sender)
     if pos is None:
         reply_fn("Ingen GPS-posisjon funnet for din node. Del posisjon og prøv igjen.")
         return
@@ -244,7 +244,7 @@ def handle_weather_command(text: str, reply_fn, ctx: BotContext) -> None:
 def handle_24h_command(text: str, reply_fn, ctx: BotContext) -> None:
     """Look up sender position, fetch 24-hour forecast, send multi-message reply."""
     interface, sender = ctx["interface"], ctx["sender"]
-    pos = get_node_position(interface, sender)
+    pos = ctx.get("position") or get_node_position(interface, sender)
     if pos is None:
         reply_fn("Ingen GPS-posisjon funnet for din node. Del posisjon og prøv igjen.")
         return

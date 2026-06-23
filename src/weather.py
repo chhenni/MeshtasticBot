@@ -73,6 +73,8 @@ def _symbol_to_no(symbol_code: str) -> str:
 
 def get_node_position(interface, node_id: str) -> tuple[float, float] | None:
     """Return (lat, lon) for a node, or None if position is unknown."""
+    if interface is None:
+        return None
     node = (interface.nodes or {}).get(node_id)
     if not node:
         return None
