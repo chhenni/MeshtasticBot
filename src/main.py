@@ -617,6 +617,7 @@ def main():
         # Updated in-place on reconnect so the web UI always uses the live interface.
         "interface": interface,
         "send_fn": send_text_with_retry,
+        "flipper_cfg": None,  # populated below after parsing config
     }
 
     signal.signal(signal.SIGHUP, _make_sighup_handler(CONFIG_FILE, bot_state))
@@ -626,6 +627,7 @@ def main():
 
     flipper_raw = cfg.get("flipper", {})
     flipper_cfg = flipper_raw if flipper_raw.get("device") else None
+    bot_state["flipper_cfg"] = flipper_cfg
     if flipper_cfg:
         log.info("flipper_configured", device=flipper_cfg["device"])
 
