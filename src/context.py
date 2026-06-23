@@ -21,6 +21,9 @@ class BotContext(TypedDict):
     county      Norwegian fylkesnummer for weather alerts, or None.
     flipper_cfg Flipper Zero config dict, or None if not configured.
                 Keys: "device" (str), "commands" (dict[str, str]).
+    position    (lat, lon) injected by the REST API when the caller
+                provides coordinates explicitly. Overrides GPS lookup
+                from the Meshtastic interface. None in normal bot usage.
     """
 
     interface: Optional[object]
@@ -30,3 +33,4 @@ class BotContext(TypedDict):
     start_time: Optional[datetime]
     county: Optional[str]
     flipper_cfg: Optional[dict]
+    position: Optional[tuple]
