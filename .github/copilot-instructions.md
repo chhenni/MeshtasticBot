@@ -4,7 +4,7 @@
 
 MeshtasticBot is a Python bot for interacting with [Meshtastic](https://meshtastic.org/) LoRa mesh network devices. It connects to devices over serial, BLE (via `bleak`), or D-Bus (via `dbus-fast`) and uses `pypubsub` for event-driven message handling.
 
-A weather alerts integration using the Norwegian Meteorological Institute API (`api.met.no`) is planned/in progress.
+It also pushes weather alerts from the Norwegian Meteorological Institute API (`api.met.no`), logs messages to SQLite, serves a Flask web UI, and can drive a Flipper Zero for privileged commands.
 
 ## Setup
 
@@ -16,7 +16,7 @@ The project uses a `.venv` virtualenv. Activate it before running:
 
 ```bash
 source .venv/bin/activate
-python main.py
+python src/main.py          # or ./run_dummy.sh for no-device dummy mode
 ```
 
 ## Key Dependencies
@@ -33,14 +33,14 @@ python main.py
 
 ## Architecture Notes
 
-- Entry point is `main.py`. Connection settings and target channel are read from `config.yaml` at startup.
+- All source lives in `src/`. Entry point is `src/main.py`. Connection settings and target channel are read from `config.yaml` at startup.
 - Meshtastic's Python SDK publishes incoming packets via `pypubsub`. Subscribe to `meshtastic.receive.text` for text messages; the packet dict includes `channel` (0-based int), `fromId` (string node ID), and `decoded.text`.
 - Replies are sent with `interface.sendText(text, channelIndex=<n>)` for channel messages, or `interface.sendText(text, destinationId=<nodeId>, channelIndex=0)` for DMs.
 - Direct messages are detected by checking `packet.get("toId") != "^all"`.
-- **Bot logic lives entirely in `generate_reply(text, sender_id)`** — return a string to reply or `None` to stay silent.
+- **Commands are defined once in `COMMAND_REGISTRY` in `src/commands.py`.** Each handler has the signature `handler(text, reply_fn, ctx: BotContext) -> None`. Dispatch (`COMMANDS`), aliases, privilege gating (`PRIVILEGED_COMMANDS`) and `/help` pages are all derived from the registry.
 - Connection type (serial / tcp / ble) is selected in `config.yaml` and resolved in the `connect()` function.
 - The `api.met.no` weather alerts endpoint: `https://api.met.no/weatherapi/metalerts/2.0/all.json?county=<fylkesnummer>`
-- **Web UI** (`web.py`) is a Flask app started as a daemon thread when `web.enabled: true` in `config.yaml`. It provides a read-only log viewer (`/`), status dashboard (`/status`), and JSON API (`/api/messages`). All DB reads go through `db.py` functions — no raw SQL in `web.py`. Templates live in `templates/` and use Bootstrap 5 via CDN.
+- **Web UI** (`web.py`) is a Flask app started as a daemon thread when `web.enabled: true` in `config.yaml`. Public pages: log viewer (`/`), status (`/status`), nodes (`/nodes`), map (`/map`), `/health`, and JSON APIs (`/api/messages`, `/api/nodes`, `/api/events` SSE). Admin pages/endpoints (`/audit`, `/admin/*`, `/api/send`, `/api/command`) use `@require_admin`. All DB access goes through `db.py` functions — no raw SQL in `web.py`. Templates live in `src/templates/` and use Bootstrap 5 via CDN.
 
 ## Bot Commands
 
@@ -48,6 +48,9 @@ python main.py
 |---|---|
 | `/help` | Lists all available commands (two messages) |
 | `/version` | Show bot version information |
+| `/ping` | Bot status and uptime |
+| `/nodes` | List nodes seen on the mesh |
+| `/alert` | Check active weather alerts now |
 | `/weather` | 7-day daily forecast from yr.no (requires node GPS position) |
 | `/24hour` (`/24h`) | Hourly forecast for next 24 hours from yr.no (requires node GPS position) |
 | `/radio` | Amateur radio HF/VHF band conditions, solar flux and K-index via HamQSL |
@@ -58,8 +61,11 @@ python main.py
 | `/whois <id/navn>` | Look up a node by exact ID (e.g. `/whois !aabbccdd`) or partial name (e.g. `/whois Alpha`) |
 | `/krslog [t]` | Message log for the last t hours (default 24h, max 168h) |
 | `/krslast [n]` | Last n messages from the log (default 10, max 100) |
+| `/addpriv <node_id>` | Add a privileged node (privileged) |
+| `/removepriv <node_id>` | Remove a privileged node (privileged) |
+| `/awning <open\|close\|stop\|lights>` | Control the awning via Flipper Zero (privileged) |
 
-**Rule: whenever a new command is added, always add it to both this table and the `HELP_MESSAGES` list in `main.py`.**
+**Rule: whenever a new command is added, add a `Command(...)` entry to `COMMAND_REGISTRY` in `src/commands.py`, add it to this table, and update the rate-limit cost comment in `config.yaml`.**
 
 ## Workflow Rules
 
@@ -83,5 +89,5 @@ python main.py
 
 ## Docker
 
-- `Dockerfile` uses `COPY *.py ./` — all Python source files are included automatically. No manual updates needed when adding new `.py` files.
+- `Dockerfile` is multi-stage: the builder copies `src/`, `tests/` and `pyproject.toml` and runs pytest; the runtime stage copies `src/` and `pyproject.toml`. New files under `src/` are included automatically.
 - `config.yaml` is mounted at runtime via `-v ./config.yaml:/app/config.yaml`, not baked into the image.
