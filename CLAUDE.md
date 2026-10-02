@@ -47,7 +47,7 @@ All source is in `src/` (pytest `pythonpath = ["src"]`, so tests import modules 
 
 ## Rules (from copilot-instructions, still binding)
 
-- **Never commit directly to `main`.** Branch (`feature/...`, `fix/...`), open a PR with `gh`, wait for CI to be green, then merge. A task isn't done until the PR is merged with green CI.
+- **Never commit directly to `main`.** Branch (`feature/...`, `fix/...`), open a PR with `gh`, and wait for CI to be green. **Never merge a PR without the user's explicit permission for that PR**; report the PR and CI status, then wait. A task is ready for handoff once the PR is open with green CI.
 - **TDD where possible**: write tests before or alongside the implementation. Tests must not hit the network; patch external calls (and `time.sleep`, scoped narrowly; see commit 3fe2c57, where a broad patch broke Flipper serial timing).
 - Run `ruff check src/ tests/` and fix issues before every commit.
 - Run `git status` before committing; stage with `git add -u` / `git add .` so files modified by tools (e.g. `ruff --fix`) aren't missed.
