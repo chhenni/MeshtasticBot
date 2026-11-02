@@ -22,6 +22,7 @@ Common values:
 | Device | idVendor | idProduct |
 |---|---|---|
 | Meshtastic node (CP210x) | `10c4` | `ea60` |
+| Meshtastic node (Seeed T1000-E) | `239a` | `8029` |
 | Flipper Zero | `0483` | `5740` |
 
 > If two devices share the same vendor/product ID (e.g. cheap CP210x clones),
@@ -38,7 +39,7 @@ sudo nano /etc/udev/rules.d/99-meshtastic.rules
 Paste (adjusting IDs if needed):
 
 ```
-# Meshtastic node
+# Meshtastic node (CP210x; for a Seeed T1000-E use idVendor 239a / idProduct 8029)
 SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="meshtastic"
 
 # Flipper Zero
@@ -69,4 +70,6 @@ lrwxrwxrwx 1 root root 7 May 23 15:00 /dev/meshtastic -> ttyUSB1
 docker-compose up -d
 ```
 
-The `docker-compose.yml` already references `/dev/meshtastic` and `/dev/flipper`, so no further changes are needed.
+The `docker-compose.yml` maps the host's `/dev/meshtastic` and `/dev/flipper` symlinks into the container, so no further changes are needed.
+Docker resolves the symlinks when the container is created, so recreate it (`docker-compose up -d --force-recreate`) after
+replugging a device.
